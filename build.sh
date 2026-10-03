@@ -17,7 +17,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .build/release/Droplet "$APP/Contents/MacOS/"
 cp Resources/Info.plist "$APP/Contents/"
 cp -R Resources/*.lproj "$APP/Contents/Resources/"
-[[ -f Resources/AppIcon.icns ]] || swift scripts/make-icon.swift Resources/AppIcon.icns
-cp Resources/AppIcon.icns "$APP/Contents/Resources/"
+[[ -f Resources/AppIcon.icns ]] || swift scripts/make-icon.swift Resources
+cp Resources/AppIcon.icns Resources/*Template.pdf "$APP/Contents/Resources/"
 codesign --force --sign - "$APP"
 echo "Built $APP"

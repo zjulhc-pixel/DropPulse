@@ -30,7 +30,7 @@ private struct MenuBarIcon: View {
     private var store = Store.shared
 
     var body: some View {
-        Image(systemName: store.isConnected ? "drop.fill" : "drop")
+        Image(nsImage: NSImage(named: store.isConnected ? "MenuBarTemplate" : "MenuBarOffTemplate") ?? NSImage())
             .onChange(of: store.isConnected) { _, connected in
                 if connected, Prefs.openOnConnect {
                     openWindow(id: "main")

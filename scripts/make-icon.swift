@@ -1,9 +1,10 @@
-// Renders the app icon into an .icns: a frosted-glass tile over a cream-to-blue wash,
-// holding the "pd" monogram (a ring with two parallel slanted stems, point-symmetric).
-// Usage: swift scripts/make-icon.swift Resources/AppIcon.icns [preview.png]
+// Renders the app icon (Resources/AppIcon.icns: a frosted-glass tile on deep blue holding the
+// "pd" monogram, a ring with two parallel slanted stems) and the menu bar template images
+// (Resources/MenuBar*Template.pdf: the monogram alone, solid when connected, faint when not).
+// Usage: swift scripts/make-icon.swift Resources [preview.png]
 import AppKit
 
-let out = CommandLine.arguments[1]
+let resources = URL(filePath: CommandLine.arguments[1])
 let set = URL(filePath: NSTemporaryDirectory()).appending(path: "AppIcon.iconset")
 try? FileManager.default.removeItem(at: set)
 try FileManager.default.createDirectory(at: set, withIntermediateDirectories: true)
@@ -80,21 +81,18 @@ func render(_ px: Int) -> NSBitmapImageRep {
     // Drop shadow under the tile.
     cg.saveGState()
     cg.setShadow(offset: CGSize(width: 0, height: -s * 0.012), blur: s * 0.03, color: color(0x0A2A66, 0.35))
-    cg.addPath(tile); cg.setFillColor(color(0x6FA2E0)); cg.fillPath()
+    cg.addPath(tile); cg.setFillColor(color(0x1A5DD3)); cg.fillPath()
     cg.restoreGState()
 
-    // Background seen through the glass: cream top-left, blue bottom-right, a cool glow on the left.
+    // Deep blue, a touch lighter at the top so the glass reads as lit from above.
     cg.saveGState()
     cg.addPath(tile); cg.clip()
-    cg.drawLinearGradient(gradient([(0, color(0xEEE1B4)), (0.3, color(0xD6D8C8)), (0.5, color(0x8DBBEC)),
-                                    (0.74, color(0x2A78E4)), (1, color(0x0F4AC4))]),
-                          start: point(0.05, 0.98), end: point(0.95, 0.02), options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
-    cg.drawRadialGradient(gradient([(0, color(0x8ED0F6, 0.8)), (1, color(0x8ED0F6, 0))]),
-                          startCenter: point(0.12, 0.42), startRadius: 0, endCenter: point(0.12, 0.42), endRadius: box.width * 0.42, options: [])
-    cg.drawRadialGradient(gradient([(0, color(0x0B44C2, 0.45)), (1, color(0x0B44C2, 0))]),
-                          startCenter: point(0.85, 0.12), startRadius: 0, endCenter: point(0.85, 0.12), endRadius: box.width * 0.5, options: [])
+    cg.drawLinearGradient(gradient([(0, color(0x2F7BE6)), (0.55, color(0x1A5DD3)), (1, color(0x0F4AC4))]),
+                          start: point(0.2, 1), end: point(0.8, 0), options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
+    cg.drawRadialGradient(gradient([(0, color(0x6FB8F5, 0.45)), (1, color(0x6FB8F5, 0))]),
+                          startCenter: point(0.15, 0.4), startRadius: 0, endCenter: point(0.15, 0.4), endRadius: box.width * 0.45, options: [])
     // Frosted sheen: a soft white wash from the top.
-    cg.drawLinearGradient(gradient([(0, color(0xFFFFFF, 0.28)), (0.45, color(0xFFFFFF, 0.06)), (1, color(0xFFFFFF, 0))]),
+    cg.drawLinearGradient(gradient([(0, color(0xFFFFFF, 0.22)), (0.45, color(0xFFFFFF, 0.05)), (1, color(0xFFFFFF, 0))]),
                           start: point(0.5, 1), end: point(0.5, 0), options: [])
 
     // The monogram: milky glass, brighter at the top, with a lit rim and a soft shadow.
@@ -129,6 +127,24 @@ if CommandLine.arguments.count > 2 {
 }
 let task = Process()
 task.executableURL = URL(filePath: "/usr/bin/iconutil")
-task.arguments = ["-c", "icns", set.path, "-o", out]
+task.arguments = ["-c", "icns", set.path, "-o", resources.appending(path: "AppIcon.icns").path]
 try task.run()
 task.waitUntilExit()
+
+/// Menu bar: an 18 pt vector template, the monogram filling its height.
+func menuBarIcon(_ name: String, alpha: CGFloat) {
+    let size = CGFloat(18), glyph = monogram(), bounds = glyph.boundingBox
+    let scale = (size - 1) / max(bounds.width, bounds.height)
+    var fit = CGAffineTransform(translationX: size / 2, y: size / 2)
+        .scaledBy(x: scale, y: scale).translatedBy(x: -bounds.midX, y: -bounds.midY)
+    var page = CGRect(x: 0, y: 0, width: size, height: size)
+    let pdf = CGContext(resources.appending(path: name) as CFURL, mediaBox: &page, nil)!
+    pdf.beginPDFPage(nil)
+    pdf.addPath(glyph.copy(using: &fit)!)
+    pdf.setFillColor(CGColor(gray: 0, alpha: alpha))
+    pdf.fillPath()
+    pdf.endPDFPage()
+    pdf.closePDF()
+}
+menuBarIcon("MenuBarTemplate.pdf", alpha: 1)
+menuBarIcon("MenuBarOffTemplate.pdf", alpha: 0.45)
