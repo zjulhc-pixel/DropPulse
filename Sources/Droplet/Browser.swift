@@ -116,20 +116,11 @@ private struct GridBrowser: View {
                 if photoMode {
                     let folders = items.filter(\.isFolder)
                     if !folders.isEmpty { grid(folders, photo: false) }
-                    let empty = files.filter { store.emptyFiles.contains($0.path) }
-                    ForEach(days(files.filter { !store.emptyFiles.contains($0.path) }), id: \.day) { group in
+                    ForEach(days(files), id: \.day) { group in
                         Section {
                             grid(group.items, photo: true)
                         } header: {
-                            SectionHeader(title: DayHeader.title(group.day), count: group.items.count)
-                        }
-                    }
-                    if !empty.isEmpty {
-                        Section {
-                            grid(empty, photo: true)
-                        } header: {
-                            SectionHeader(title: String(localized: "Empty Files"), count: empty.count,
-                                          note: String(localized: "These hold no picture on the phone, probably unfinished copies from another app."))
+                            DayHeader(day: group.day, count: group.items.count)
                         }
                     }
                 } else {
@@ -177,27 +168,21 @@ private struct GridBrowser: View {
     }
 }
 
-private struct SectionHeader: View {
-    let title: String
+private struct DayHeader: View {
+    let day: Date
     let count: Int
-    var note: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(title).font(.title3.bold())
-                Spacer()
-                Text(itemCount(count)).font(.callout).foregroundStyle(.secondary)
-            }
-            if let note { Text(note).font(.callout).foregroundStyle(.secondary) }
+        HStack(alignment: .firstTextBaseline) {
+            Text(title).font(.title3.bold())
+            Spacer()
+            Text(itemCount(count)).font(.callout).foregroundStyle(.secondary)
         }
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity)
     }
-}
 
-enum DayHeader {
-    static func title(_ day: Date) -> String {
+    private var title: String {
         let calendar = Calendar.current
         if calendar.isDateInToday(day) { return String(localized: "Today") }
         if calendar.isDateInYesterday(day) { return String(localized: "Yesterday") }
@@ -297,12 +282,6 @@ struct Thumb: View {
                 .aspectRatio(contentMode: style == .fill ? .fill : .fit)
                 .clipShape(.rect(cornerRadius: style == .fill ? 0 : radius))
                 .transition(.opacity)
-        } else if Store.shared.emptyFiles.contains(item.path) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(.title2).foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(.quinary, in: .rect(cornerRadius: radius))
-                .help("This file is empty on the phone — probably an unfinished copy.")
         } else if failed || style == .icon {
             Image(nsImage: Icons.for(item)).resizable().aspectRatio(contentMode: .fit)
                 .padding(style == .icon ? 0 : 24)
@@ -487,7 +466,7 @@ extension Store {
 
     var subtitle: String {
         let parent = path.split(separator: "/").dropLast().map { folderTitle(String($0), device: nil) }
-        let count = itemCount((listings[path] ?? []).count)
+        let count = itemCount(listed.count)
         return parent.isEmpty ? count : parent.joined(separator: " › ") + " · " + count
     }
 }

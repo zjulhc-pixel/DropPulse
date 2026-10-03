@@ -90,7 +90,7 @@ enum Prefs {
 
     let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appending(path: "Droplet")
     private var takenCache: [String: Double] = [:]       // capture time, or emptyMark
-    private(set) var emptyFiles = Set<String>()          // all zeros on the phone: unfinished copies
+    private(set) var emptyFiles = Set<String>()          // all zeros on the phone (unfinished copies): hidden
     private static let emptyMark = -1.0
     private var dating = Set<String>()
 
@@ -183,9 +183,11 @@ enum Prefs {
 
     // MARK: Browsing
 
+    /// The current folder, minus empty files (they hold nothing to show).
+    var listed: [PhoneItem] { (listings[path] ?? []).filter { !emptyFiles.contains($0.path) } }
+
     var items: [PhoneItem] {
-        let all = listings[path] ?? []
-        return search.isEmpty ? all : all.filter { $0.name.localizedStandardContains(search) }
+        search.isEmpty ? listed : listed.filter { $0.name.localizedStandardContains(search) }
     }
 
     var selectedItems: [PhoneItem] { items.filter { selection.contains($0.id) } }
@@ -304,10 +306,6 @@ enum Prefs {
     }
 
     func activate(_ item: PhoneItem) {
-        if emptyFiles.contains(item.path) {
-            alert = String(localized: "“\(item.name)” is empty on the phone. It holds no picture, probably an unfinished copy.")
-            return
-        }
         switch item.kind {
         case .folder: open(item.path)
         case .video: playing = item
@@ -361,7 +359,7 @@ enum Prefs {
     var lastImport: Date { Date(timeIntervalSince1970: UserDefaults.standard.double(forKey: lastImportKey)) }
 
     var newItems: [PhoneItem] {
-        (listings[Self.cameraPath] ?? []).filter { !$0.isFolder && $0.date > lastImport }
+        (listings[Self.cameraPath] ?? []).filter { !$0.isFolder && $0.date > lastImport && !emptyFiles.contains($0.path) }
     }
 
     func importNew() {
