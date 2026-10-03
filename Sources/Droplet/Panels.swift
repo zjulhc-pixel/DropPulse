@@ -240,7 +240,7 @@ private struct NewItemsCard: View {
                 HStack(spacing: 6) {
                     ForEach(items.prefix(5)) { item in
                         Color.clear.aspectRatio(1, contentMode: .fit)
-                            .overlay { Thumb(item: item, fill: true) }
+                            .overlay { Thumb(item: item, style: .fill) }
                             .clipShape(.rect(cornerRadius: 7))
                     }
                 }

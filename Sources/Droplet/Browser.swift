@@ -198,30 +198,14 @@ private struct Tile: View {
 
     var body: some View {
         if photo {
+            // A square cell; the photo keeps its own shape inside it, and the rest stays empty.
             Color.clear
                 .aspectRatio(1, contentMode: .fit)
-                .overlay { Thumb(item: item, fill: true) }
-                .clipShape(.rect(cornerRadius: 10))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 10)
-                        .strokeBorder(selected ? AnyShapeStyle(.tint) : AnyShapeStyle(.separator.opacity(0.5)),
-                                      lineWidth: selected ? 3 : 0.5)
-                }
-                .overlay(alignment: .topTrailing) {
-                    if selected {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.title3)
-                            .symbolRenderingMode(.palette)
-                            .foregroundStyle(.white, .tint)
-                            .padding(6)
-                            .transition(.scale.combined(with: .opacity))
-                    }
-                }
-                .animation(.snappy(duration: 0.18), value: selected)
+                .overlay { Thumb(item: item, style: .photo(selected: selected)) }
                 .contentShape(.rect)
         } else {
             VStack(spacing: 6) {
-                Thumb(item: item, fill: false)
+                Thumb(item: item, style: .icon)
                     .frame(width: 72, height: 72)
                     .padding(6)
                     .background(selected ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.clear), in: .rect(cornerRadius: 10))
@@ -242,41 +226,67 @@ private struct Tile: View {
 
 /// Photo or video thumbnail, or the Mac's own icon for the file type.
 struct Thumb: View {
+    enum Style: Equatable {
+        case fill                       // cropped to fill a square
+        case photo(selected: Bool)      // whole photo in its own shape, ringed when selected
+        case icon                       // fitted, the file icon while loading
+    }
+
     let item: PhoneItem
-    var fill = false
+    let style: Style
     @State private var image: NSImage?
     @State private var failed = false
 
     var body: some View {
         if item.kind == .image || item.kind == .video {
-            ZStack {
-                if fill { Rectangle().fill(.quinary) }
-                if let image {
-                    Image(nsImage: image)
-                        .resizable()
-                        .aspectRatio(contentMode: fill ? .fill : .fit)
-                        .clipShape(.rect(cornerRadius: fill ? 0 : 6))
-                        .transition(.opacity)
-                } else if !fill || failed {
-                    Image(nsImage: Icons.for(item)).resizable().aspectRatio(contentMode: .fit)
-                        .padding(fill ? 24 : 0)
+            content
+                .overlay(alignment: .bottomLeading) {
+                    if item.kind == .video, image != nil {
+                        Label(item.size.formatted(.byteCount(style: .file)), systemImage: "play.fill")
+                            .font(.caption2.weight(.semibold)).foregroundStyle(.white)
+                            .shadow(radius: 2)
+                            .padding(6)
+                    }
                 }
-            }
-            .overlay(alignment: .bottomLeading) {
-                if item.kind == .video {
-                    Label(item.size.formatted(.byteCount(style: .file)), systemImage: "play.fill")
-                        .font(.caption2.weight(.semibold)).foregroundStyle(.white)
-                        .shadow(radius: 2)
-                        .padding(6)
+                .overlay {
+                    if case .photo(true) = style {
+                        RoundedRectangle(cornerRadius: 8).strokeBorder(.tint, lineWidth: 3)
+                    }
                 }
-            }
-            .task(id: item) {
-                let loaded = await Thumbs.shared.image(for: item)
-                withAnimation(.easeOut(duration: 0.15)) { image = loaded }
-                failed = loaded == nil && !Task.isCancelled
-            }
+                .overlay(alignment: .topTrailing) {
+                    if case .photo(true) = style {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.title3)
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(.white, .tint)
+                            .padding(5)
+                            .transition(.scale.combined(with: .opacity))
+                    }
+                }
+                .animation(.snappy(duration: 0.18), value: style)
+                .task(id: item) {
+                    let loaded = await Thumbs.shared.image(for: item)
+                    withAnimation(.easeOut(duration: 0.15)) { image = loaded }
+                    failed = loaded == nil && !Task.isCancelled
+                }
         } else {
             Image(nsImage: Icons.for(item)).resizable().aspectRatio(contentMode: .fit)
+        }
+    }
+
+    @ViewBuilder private var content: some View {
+        let radius: CGFloat = style == .icon ? 6 : 8
+        if let image {
+            Image(nsImage: image)
+                .resizable()
+                .aspectRatio(contentMode: style == .fill ? .fill : .fit)
+                .clipShape(.rect(cornerRadius: style == .fill ? 0 : radius))
+                .transition(.opacity)
+        } else if failed || style == .icon {
+            Image(nsImage: Icons.for(item)).resizable().aspectRatio(contentMode: .fit)
+                .padding(style == .icon ? 0 : 24)
+        } else {
+            RoundedRectangle(cornerRadius: radius).fill(.quinary)
         }
     }
 }
