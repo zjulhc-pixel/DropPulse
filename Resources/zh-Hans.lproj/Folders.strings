@@ -1,0 +1,14 @@
+/* Common Android folder names shown in the sidebar and title bar. */
+"Camera" = "相机";
+"Download" = "下载";
+"Downloads" = "下载";
+"Screenshots" = "截屏";
+"Pictures" = "图片";
+"Movies" = "影片";
+"Music" = "音乐";
+"Documents" = "文稿";
+"Recordings" = "录音";
+"Ringtones" = "铃声";
+"Alarms" = "闹钟";
+"Notifications" = "通知";
+"Podcasts" = "播客";

@@ -1,0 +1,107 @@
+/* Browser */
+"Empty Folder" = "空文件夹";
+"Drop files here to send them to your phone." = "把文件拖到这里，即可发送到手机。";
+"Send to %@" = "发送到“%@”";
+"Back" = "后退";
+"Forward" = "前进";
+"View" = "显示";
+"Icons" = "图标";
+"List" = "列表";
+"Send to Phone…" = "发送到手机…";
+"Send files from your Mac to this folder" = "把 Mac 上的文件发送到这个文件夹";
+"Import %lld New" = "导入 %lld 项新内容";
+"Copy new photos and videos to %@" = "把新照片和视频拷贝到“%@”";
+"Today" = "今天";
+"Yesterday" = "昨天";
+"%lld items" = "%lld 项";
+"1 item" = "1 项";
+"Name" = "名称";
+"Date Modified" = "修改日期";
+"Size" = "大小";
+"Kind" = "种类";
+"Folder" = "文件夹";
+"Open" = "打开";
+"Add to Sidebar" = "添加到边栏";
+"Remove from Sidebar" = "从边栏移除";
+"Quick Look" = "快速查看";
+"Open on Mac" = "在 Mac 上打开";
+"Copy to Mac" = "拷贝到 Mac";
+"Copy to…" = "拷贝到…";
+"Copy Here" = "拷贝到这里";
+"Rename…" = "重新命名…";
+"Delete from Phone…" = "从手机删除…";
+"New Folder" = "新建文件夹";
+"%lld selected" = "已选 %lld 项";
+"Deselect" = "取消选择";
+
+/* Dialogs */
+"Something went wrong" = "出了点问题";
+"Delete" = "删除";
+"This can’t be undone." = "此操作无法撤销。";
+"Delete “%@” from the phone?" = "要从手机删除“%@”吗？";
+"Delete %lld items from the phone?" = "要从手机删除 %lld 个项目吗？";
+"%lld items with the same name already exist on the phone." = "手机上已有 %lld 个同名项目。";
+"Replace" = "替换";
+"Skip" = "跳过";
+"Cancel" = "取消";
+"Create" = "创建";
+"Rename" = "重新命名";
+
+/* Sidebar */
+"No Device" = "未连接设备";
+"Internal Storage" = "内部存储";
+"%@ free" = "剩余 %@";
+"Unlock your phone" = "解锁手机";
+"Plug in a USB cable" = "插入 USB 数据线";
+"Eject" = "推出";
+"Drop phone items here to copy them" = "把手机上的项目拖到这里即可拷贝";
+
+/* Connect */
+"Connect your Android phone" = "连接你的 Android 手机";
+"Plug in a USB cable and your photos, videos and files show up here. Nothing to install on the phone." = "插上 USB 数据线，照片、视频和文件就会出现在这里。手机端不用装任何 App。";
+"Plug in the cable" = "插上数据线";
+"Use a USB‑C cable that carries data. Charge-only cables won’t work." = "用支持数据传输的 USB‑C 线连接 Mac，纯充电线无效。";
+"Your Mac can’t read the phone’s storage while the screen is locked." = "屏幕锁定时，Mac 无法读取手机存储。";
+"Choose “File transfer”" = "选择“文件传输”";
+"Pull down the notification shade, tap the USB option and switch to “File transfer”." = "下拉通知栏，点 USB 选项，切换为“文件传输”。";
+"Still not detected? Quit apps that hold the USB connection, such as Android File Transfer or OpenMTP." = "还是识别不到？先退出 Android File Transfer、OpenMTP 等占用 USB 的应用。";
+"Waiting for you to unlock %@…" = "等待解锁 %@…";
+"Another app is using the phone…" = "手机正被其他应用占用…";
+"Waiting for a device…" = "正在等待设备…";
+
+/* Transfers */
+"Transfers" = "传输";
+"%@ → %@" = "%@ → %@";
+"%@ → Phone › %@" = "%@ → 手机 › %@";
+"Show in Finder" = "在访达中显示";
+"Waiting…" = "等待中…";
+"%@ of %@ · %lld MB/s" = "%@ / %@ · %lld MB/s";
+"Done" = "已完成";
+
+/* Menu bar */
+"USB connected · %@ free" = "USB 已连接 · 剩余 %@";
+"Recent Transfers" = "最近传输";
+"Open Droplet" = "打开 Droplet";
+"Settings…" = "设置…";
+"Quit" = "退出";
+"No new photos" = "没有新照片";
+"%lld new photos & videos" = "%lld 项新照片和视频";
+"Since %@" = "自 %@ 起";
+"Import to %@" = "导入到“%@”";
+
+/* Menus */
+"Move to Trash on Phone" = "从手机删除";
+"as Icons" = "作为图标";
+"as List" = "作为列表";
+"Go" = "前往";
+"Enclosing Folder" = "上层文件夹";
+"Device" = "设备";
+"Import New Photos & Videos" = "导入新照片和视频";
+"Refresh" = "刷新";
+
+/* Settings */
+"Import new photos to" = "新照片导入到";
+"Copy to Mac saves to" = "“拷贝到 Mac”存放到";
+"Show in Finder when copying finishes" = "拷贝完成后在访达中显示";
+"Open Droplet when a phone connects" = "连接手机时打开 Droplet";
+"Show hidden files" = "显示隐藏文件";
