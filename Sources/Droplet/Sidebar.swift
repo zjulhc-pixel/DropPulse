@@ -2,15 +2,29 @@ import SwiftUI
 
 struct RootView: View {
     @Bindable private var store = Store.shared
+    @AppStorage("sidebarIconsOnly") private var iconsOnly = false
+    @State private var columns = UserDefaults.standard.bool(forKey: "sidebarIconsOnly") ? NavigationSplitViewVisibility.detailOnly : .all
     @State private var newName = ""
 
     var body: some View {
-        NavigationSplitView {
+        // Three sidebar states: full (the split view's sidebar), icons only (sidebar hidden, a glass
+        // rail inside the content), and hidden (⌃⌘S or the toolbar button).
+        NavigationSplitView(columnVisibility: $columns) {
             Sidebar()
                 .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 320)
         } detail: {
-            if store.isConnected { Browser() } else { ConnectView() }
+            HStack(alignment: .top, spacing: 0) {
+                if iconsOnly && columns == .detailOnly {
+                    IconRail()
+                        .padding(.leading, 10)
+                        .padding(.top, 8)
+                        .transition(.move(edge: .leading).combined(with: .opacity))
+                }
+                if store.isConnected { Browser() } else { ConnectView() }
+            }
         }
+        .onChange(of: iconsOnly) { withAnimation(.snappy) { columns = iconsOnly ? .detailOnly : .all } }
+        .onChange(of: columns) { if columns != .detailOnly, iconsOnly { iconsOnly = false } }
         .alert("Something went wrong", isPresented: Binding(get: { store.alert != nil }, set: { _ in store.alert = nil })) {
         } message: {
             Text(store.alert ?? "")
@@ -50,6 +64,7 @@ struct RootView: View {
 }
 
 struct Sidebar: View {
+    @AppStorage("sidebarIconsOnly") private var iconsOnly = false
     private var store = Store.shared
 
     var body: some View {
@@ -60,7 +75,7 @@ struct Sidebar: View {
                 .selectionDisabled()
 
             Section("Android") {
-                ForEach(store.favorites.filter { !store.missing.contains($0) }, id: \.self) { path in
+                ForEach(store.visibleFavorites, id: \.self) { path in
                     Label(folderTitle(path, device: nil), systemImage: folderSymbol(path))
                         .badge(path == Store.cameraPath && !store.newItems.isEmpty ? Text("\(store.newItems.count)") : nil)
                         .tag(path)
@@ -71,36 +86,50 @@ struct Sidebar: View {
                 }
             }
             .disabled(!store.isConnected)
+        }
+        .safeAreaInset(edge: .bottom, alignment: .leading) {
+            Button("Icons Only", systemImage: "sidebar.squares.left") { iconsOnly = true }
+                .labelStyle(.iconOnly)
+                .buttonStyle(.borderless)
+                .help("Icons Only")
+                .padding(12)
+        }
+    }
+}
 
-            Section("Mac") {
-                ForEach(macFolders, id: \.self) { url in
-                    Button {
-                        NSWorkspace.shared.open(url)
-                    } label: {
-                        Label(FileManager.default.displayName(atPath: url.path), systemImage: macSymbol(url))
+/// The sidebar folded down to its icons: a floating glass column beside the content.
+private struct IconRail: View {
+    @AppStorage("sidebarIconsOnly") private var iconsOnly = false
+    private var store = Store.shared
+
+    var body: some View {
+        VStack(spacing: 6) {
+            ForEach(store.visibleFavorites, id: \.self) { path in
+                let title = folderTitle(path, device: nil)
+                Button(title, systemImage: folderSymbol(path)) { store.open(path) }
+                    .labelStyle(.iconOnly)
+                    .font(.title3)
+                    .frame(width: 40, height: 40)
+                    .background(store.path == path ? AnyShapeStyle(.tint.opacity(0.18)) : AnyShapeStyle(.clear), in: .circle)
+                    .foregroundStyle(store.path == path ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
+                    .overlay(alignment: .topTrailing) {
+                        if path == Store.cameraPath && !store.newItems.isEmpty {
+                            Circle().fill(.tint).frame(width: 8, height: 8).offset(x: -4, y: 4)
+                        }
                     }
-                    .buttonStyle(.plain)
-                    .help("Drop phone items here to copy them")
-                    .dropDestination(for: PhoneItem.self) { items, _ in store.copyToMac(items, to: url); return true }
-                }
+                    .help(title)
+                    .dropDestination(for: URL.self) { urls, _ in store.sendToPhone(urls, to: path); return true }
             }
+            .disabled(!store.isConnected)
+            Divider().frame(width: 24)
+            Button("Show Names", systemImage: "sidebar.left") { iconsOnly = false }
+                .labelStyle(.iconOnly)
+                .frame(width: 40, height: 40)
+                .help("Show Names")
         }
-    }
-
-    private var macFolders: [URL] {
-        var folders = [FileManager.SearchPathDirectory.desktopDirectory, .downloadsDirectory, .picturesDirectory]
-            .map { FileManager.default.urls(for: $0, in: .userDomainMask)[0] }
-        for url in [Prefs.copyFolder, Prefs.importFolder] where !folders.contains(url) { folders.append(url) }
-        return folders
-    }
-
-    private func macSymbol(_ url: URL) -> String {
-        switch url.lastPathComponent {
-        case "Desktop": "menubar.dock.rectangle"
-        case "Downloads": "arrow.down.circle"
-        case "Pictures": "photo.on.rectangle"
-        default: "folder"
-        }
+        .buttonStyle(.borderless)
+        .padding(.vertical, 8)
+        .glassEffect(.regular, in: .capsule)
     }
 }
 
@@ -109,11 +138,6 @@ private struct DeviceCard: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: "smartphone")
-                .font(.title3)
-                .foregroundStyle(store.isConnected ? .white : .secondary)
-                .frame(width: 34, height: 34)
-                .background(store.isConnected ? AnyShapeStyle(.tint) : AnyShapeStyle(.quaternary), in: .rect(cornerRadius: 9))
             VStack(alignment: .leading, spacing: 3) {
                 Text(store.device?.name ?? String(localized: "No Device")).font(.headline).lineLimit(1)
                 if let storage = store.storage {

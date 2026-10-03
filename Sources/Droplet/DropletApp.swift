@@ -1,7 +1,9 @@
+import ServiceManagement
 import SwiftUI
 
 @main
 struct DropletApp: App {
+    @NSApplicationDelegateAdaptor private var delegate: AppDelegate
     private let store = Store.shared
 
     var body: some Scene {
@@ -9,6 +11,7 @@ struct DropletApp: App {
             RootView()
         }
         .defaultSize(width: 1120, height: 740)
+        .defaultLaunchBehavior(.suppressed)          // MenuBarIcon decides: not when started at login
         .commands { DropletCommands(store: store) }
 
         MenuBarExtra {
@@ -24,24 +27,59 @@ struct DropletApp: App {
     }
 }
 
-/// Always alive in the menu bar, so it also opens the window when a phone connects.
+/// Droplet starts at login and waits in the menu bar, so plugging in a phone opens it.
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    @MainActor static var launch: (done: Bool, atLogin: Bool) = (false, false)
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        let event = NSAppleEventManager.shared().currentAppleEvent
+        Self.launch = (true, event?.paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue == keyAELaunchedAsLogInItem)
+        Self.updateLoginItem()
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        if !hasVisibleWindows { NotificationCenter.default.post(name: .openMainWindow, object: nil) }
+        return true
+    }
+
+    /// Only the installed copy registers, so development builds don't take over the login item.
+    @MainActor static func updateLoginItem() {
+        guard Bundle.main.bundlePath.hasPrefix("/Applications/") else { return }
+        if Prefs.openOnConnect { try? SMAppService.mainApp.register() } else { try? SMAppService.mainApp.unregister() }
+    }
+}
+
+extension Notification.Name {
+    static let openMainWindow = Notification.Name("openMainWindow")
+}
+
+/// Always alive in the menu bar, so it also opens the window at launch, on reopen, and when a
+/// phone connects.
 private struct MenuBarIcon: View {
     @Environment(\.openWindow) private var openWindow
     private var store = Store.shared
 
     var body: some View {
         Image(nsImage: NSImage(named: store.isConnected ? "MenuBarTemplate" : "MenuBarOffTemplate") ?? NSImage())
-            .onChange(of: store.isConnected) { _, connected in
-                if connected, Prefs.openOnConnect {
-                    openWindow(id: "main")
-                    NSApp.activate()
-                }
+            .task {
+                while !AppDelegate.launch.done { try? await Task.sleep(for: .milliseconds(20)) }
+                if !AppDelegate.launch.atLogin { show() }
             }
+            .onReceive(NotificationCenter.default.publisher(for: .openMainWindow)) { _ in show() }
+            .onChange(of: store.isConnected) { _, connected in
+                if connected, Prefs.openOnConnect { show() }
+            }
+    }
+
+    private func show() {
+        openWindow(id: "main")
+        NSApp.activate()
     }
 }
 
 private struct DropletCommands: Commands {
     let store: Store
+    @AppStorage("sidebarIconsOnly") private var sidebarIconsOnly = false
 
     var body: some Commands {
         SidebarCommands()
@@ -68,6 +106,8 @@ private struct DropletCommands: Commands {
             }
             .pickerStyle(.inline)
             Divider()
+            Toggle("Sidebar Icons Only", isOn: $sidebarIconsOnly)
+                .keyboardShortcut("s", modifiers: [.command, .option])
         }
 
         CommandMenu("Go") {
@@ -115,7 +155,11 @@ struct SettingsView: View {
                 Toggle("Show in Finder when copying finishes", isOn: $revealAfterCopy)
             }
             Section {
-                Toggle("Open Droplet when a phone connects", isOn: $openOnConnect)
+                Toggle(isOn: $openOnConnect) {
+                    Text("Open Droplet when a phone connects")
+                    Text("Droplet waits in the menu bar after you log in.")
+                }
+                .onChange(of: openOnConnect) { AppDelegate.updateLoginItem() }
                 Toggle("Show hidden files", isOn: $showHidden)
                     .onChange(of: showHidden) { Task { await Store.shared.refresh() } }
             }

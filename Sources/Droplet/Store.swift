@@ -72,7 +72,7 @@ enum Prefs {
         didSet { UserDefaults.standard.set(viewMode.rawValue, forKey: "viewMode") }
     }
     private(set) var favorites = UserDefaults.standard.stringArray(forKey: "favorites")
-        ?? ["/", cameraPath, "/Download", "/DCIM/Screenshots", "/Pictures/Screenshots"]
+        ?? ["/", cameraPath, "/Download"]
     private(set) var missing = Set<String>()        // favorites absent on this phone
 
     // Transfers and dialogs
@@ -240,6 +240,8 @@ enum Prefs {
     }
 
     // MARK: Favorites
+
+    var visibleFavorites: [String] { favorites.filter { !missing.contains($0) } }
 
     func isFavorite(_ path: String) -> Bool { favorites.contains(path) }
 
