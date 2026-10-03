@@ -245,6 +245,7 @@ struct Thumb: View {
     let item: PhoneItem
     var fill = false
     @State private var image: NSImage?
+    @State private var failed = false
 
     var body: some View {
         if item.kind == .image || item.kind == .video {
@@ -256,8 +257,9 @@ struct Thumb: View {
                         .aspectRatio(contentMode: fill ? .fill : .fit)
                         .clipShape(.rect(cornerRadius: fill ? 0 : 6))
                         .transition(.opacity)
-                } else if !fill {
+                } else if !fill || failed {
                     Image(nsImage: Icons.for(item)).resizable().aspectRatio(contentMode: .fit)
+                        .padding(fill ? 24 : 0)
                 }
             }
             .overlay(alignment: .bottomLeading) {
@@ -271,6 +273,7 @@ struct Thumb: View {
             .task(id: item) {
                 let loaded = await Thumbs.shared.image(for: item)
                 withAnimation(.easeOut(duration: 0.15)) { image = loaded }
+                failed = loaded == nil && !Task.isCancelled
             }
         } else {
             Image(nsImage: Icons.for(item)).resizable().aspectRatio(contentMode: .fit)
