@@ -13,17 +13,24 @@ import UniformTypeIdentifiers
 
     private let memory = NSCache<NSString, NSImage>()
     private let dir = Store.shared.cacheDir.appending(path: "thumbs")
+    private var failed = Set<String>()          // tried this session: no thumbnail to be had
+    private var blank = Set<String>()           // all zeros on the phone: an unfinished copy
 
     func image(for item: PhoneItem) async -> NSImage? {
-        let key = "\(item.path)|\(item.size)|\(item.date.timeIntervalSince1970)".stableHash
+        let key = Self.key(item)
         if let image = memory.object(forKey: key as NSString) { return image }
+        guard !failed.contains(key) else { return nil }
         let file = dir.appending(path: key + ".jpg")
         var data = await Task.detached { try? Data(contentsOf: file) }.value
         if data == nil, let mtp = Store.shared.device, !Task.isCancelled {
-            data = await Self.make(item, mtp)
+            let made = await Self.make(item, mtp)
+            data = made.jpeg
             if let data {
                 try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
                 try? data.write(to: file)
+            } else if !Task.isCancelled {
+                failed.insert(key)
+                if made.blank { blank.insert(key) }
             }
         }
         guard let data, let image = NSImage(data: data) else { return nil }
@@ -31,10 +38,19 @@ import UniformTypeIdentifiers
         return image
     }
 
-    nonisolated private static func make(_ item: PhoneItem, _ mtp: MTP) async -> Data? {
+    /// The file holds nothing but zeros, so there is no picture to show.
+    func isBlank(_ item: PhoneItem) -> Bool { blank.contains(Self.key(item)) }
+
+    nonisolated private static func key(_ item: PhoneItem) -> String {
+        "\(item.path)|\(item.size)|\(item.date.timeIntervalSince1970)".stableHash
+    }
+
+    nonisolated private static func make(_ item: PhoneItem, _ mtp: MTP) async -> (jpeg: Data?, blank: Bool) {
         var image: CGImage?
         let head = item.kind == .image ? try? await mtp.read(item, length: 128 << 10) : nil
-        if item.kind == .video {
+        if let head, !head.isEmpty, !head.contains(where: { $0 != 0 }) {
+            return (nil, true)
+        } else if item.kind == .video {
             let generator = AVAssetImageGenerator(asset: PhoneAsset(item, mtp))
             generator.maximumSize = CGSize(width: 480, height: 480)
             generator.appliesPreferredTrackTransform = true
@@ -53,7 +69,7 @@ import UniformTypeIdentifiers
         } else if ["jpg", "jpeg"].contains(item.ext), let data = try? await mtp.thumbnail(item),
                   let source = CGImageSourceCreateWithData(data as CFData, nil) {
             image = CGImageSourceCreateImageAtIndex(source, 0, nil)
-        } else if item.size < 40 << 20, let whole = try? await mtp.read(item, length: Int(item.size)),
+        } else if item.size < 200 << 20, let whole = try? await mtp.read(item, length: Int(item.size)),
                   let source = CGImageSourceCreateWithData(whole as CFData, nil) {
             image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
                 kCGImageSourceCreateThumbnailFromImageAlways: true,
@@ -61,11 +77,12 @@ import UniformTypeIdentifiers
                 kCGImageSourceThumbnailMaxPixelSize: 480,
             ] as CFDictionary)
         }
-        guard let image else { return nil }
+        guard let image else { return (nil, false) }
         let out = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(out, UTType.jpeg.identifier as CFString, 1, nil) else { return nil }
+        guard let destination = CGImageDestinationCreateWithData(out, UTType.jpeg.identifier as CFString, 1, nil)
+        else { return (nil, false) }
         CGImageDestinationAddImage(destination, image, [kCGImageDestinationLossyCompressionQuality: 0.85] as CFDictionary)
-        return CGImageDestinationFinalize(destination) ? out as Data : nil
+        return (CGImageDestinationFinalize(destination) ? out as Data : nil, false)
     }
 
     /// The JPEG in Exif IFD1 (JPEG APP1 or a HEIC Exif item), turned upright.

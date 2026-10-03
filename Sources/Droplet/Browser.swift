@@ -282,6 +282,12 @@ struct Thumb: View {
                 .aspectRatio(contentMode: style == .fill ? .fill : .fit)
                 .clipShape(.rect(cornerRadius: style == .fill ? 0 : radius))
                 .transition(.opacity)
+        } else if failed, Thumbs.shared.isBlank(item) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.title2).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(.quinary, in: .rect(cornerRadius: radius))
+                .help("This file is empty on the phone — probably an unfinished copy.")
         } else if failed || style == .icon {
             Image(nsImage: Icons.for(item)).resizable().aspectRatio(contentMode: .fit)
                 .padding(style == .icon ? 0 : 24)
