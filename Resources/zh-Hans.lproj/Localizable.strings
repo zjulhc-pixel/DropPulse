@@ -75,7 +75,10 @@
 "%@ → Phone › %@" = "%@ → 手机 › %@";
 "Show in Finder" = "在访达中显示";
 "Waiting…" = "等待中…";
-"%@ of %@ · %lld MB/s" = "%@ / %@ · %lld MB/s";
+"%@ of %@ · %@/s" = "%@ / %@ · %@/s";
+"Stop" = "停止";
+"Close" = "关闭";
+"Stopped" = "已停止";
 "Done" = "已完成";
 
 /* Menu bar */
@@ -105,3 +108,13 @@
 "Show in Finder when copying finishes" = "拷贝完成后在访达中显示";
 "Open Droplet when a phone connects" = "连接手机时打开 Droplet";
 "Show hidden files" = "显示隐藏文件";
+
+/* Phone errors */
+"The item is no longer on the phone." = "该项目已不在手机上。";
+"The phone is out of space." = "手机存储空间不足。";
+"The phone didn’t allow this." = "手机拒绝了此操作。";
+"The phone is busy. Try again in a moment." = "手机正忙，请稍后再试。";
+"The phone reported an error (%@)." = "手机返回了错误（%@）。";
+"The phone is disconnected." = "手机已断开连接。";
+"This phone doesn’t offer file transfer." = "这台手机未开启文件传输。";
+"“%@” isn’t on the phone." = "手机上没有“%@”。";

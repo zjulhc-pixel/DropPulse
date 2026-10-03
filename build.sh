@@ -13,12 +13,11 @@ swift build -c release
 
 APP=build/Droplet.app
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Frameworks" "$APP/Contents/Resources"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .build/release/Droplet "$APP/Contents/MacOS/"
-cp Vendor/kalam/kalam.dylib Vendor/kalam/libusb.dylib "$APP/Contents/Frameworks/"
 cp Resources/Info.plist "$APP/Contents/"
 cp -R Resources/*.lproj "$APP/Contents/Resources/"
 [[ -f Resources/AppIcon.icns ]] || swift scripts/make-icon.swift Resources/AppIcon.icns
 cp Resources/AppIcon.icns "$APP/Contents/Resources/"
-codesign --force --deep --sign - "$APP"
+codesign --force --sign - "$APP"
 echo "Built $APP"

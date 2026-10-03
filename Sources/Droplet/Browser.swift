@@ -1,3 +1,4 @@
+import AVKit
 import QuickLook
 import SwiftUI
 import UniformTypeIdentifiers
@@ -53,6 +54,7 @@ struct Browser: View {
             return true
         } isTargeted: { dropping = $0 }
         .quickLookPreview($store.previewURL)
+        .sheet(item: $store.playing) { VideoSheet(item: $0) }
         .navigationTitle(store.title)
         .navigationSubtitle(store.subtitle)
         .searchable(text: $store.search, placement: .toolbar)
@@ -238,15 +240,14 @@ private struct Tile: View {
     }
 }
 
-/// Photo thumbnail, video placeholder, or the Mac's own icon for the file type.
+/// Photo or video thumbnail, or the Mac's own icon for the file type.
 struct Thumb: View {
     let item: PhoneItem
     var fill = false
     @State private var image: NSImage?
 
     var body: some View {
-        switch item.kind {
-        case .image:
+        if item.kind == .image || item.kind == .video {
             ZStack {
                 if fill { Rectangle().fill(.quinary) }
                 if let image {
@@ -259,21 +260,19 @@ struct Thumb: View {
                     Image(nsImage: Icons.for(item)).resizable().aspectRatio(contentMode: .fit)
                 }
             }
+            .overlay(alignment: .bottomLeading) {
+                if item.kind == .video {
+                    Label(item.size.formatted(.byteCount(style: .file)), systemImage: "play.fill")
+                        .font(.caption2.weight(.semibold)).foregroundStyle(.white)
+                        .shadow(radius: 2)
+                        .padding(6)
+                }
+            }
             .task(id: item) {
                 let loaded = await Thumbs.shared.image(for: item)
-                withAnimation(.easeOut(duration: 0.2)) { image = loaded }
+                withAnimation(.easeOut(duration: 0.15)) { image = loaded }
             }
-        case .video where fill:
-            ZStack {
-                LinearGradient(colors: [.gray.opacity(0.55), .black.opacity(0.75)], startPoint: .top, endPoint: .bottom)
-                Image(systemName: "play.fill").font(.title).foregroundStyle(.white.opacity(0.9))
-            }
-            .overlay(alignment: .bottomLeading) {
-                Text(item.size.formatted(.byteCount(style: .file)))
-                    .font(.caption2.weight(.semibold)).foregroundStyle(.white)
-                    .padding(6)
-            }
-        default:
+        } else {
             Image(nsImage: Icons.for(item)).resizable().aspectRatio(contentMode: .fit)
         }
     }
@@ -403,6 +402,30 @@ private struct SelectionBar: View {
             }
             .controlSize(.extraLarge)
         }
+    }
+}
+
+/// Plays a phone video while it streams over USB; nothing is copied first.
+private struct VideoSheet: View {
+    let item: PhoneItem
+    @State private var player: AVPlayer?
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VideoPlayer(player: player)
+            .frame(minWidth: 720, idealWidth: 960, minHeight: 405, idealHeight: 540)
+            .overlay(alignment: .topTrailing) {
+                Button("Close", systemImage: "xmark") { dismiss() }
+                    .labelStyle(.iconOnly).buttonStyle(.glass).buttonBorderShape(.circle)
+                    .keyboardShortcut(.cancelAction)
+                    .padding(12)
+            }
+            .onAppear {
+                guard let device = Store.shared.device else { return }
+                player = AVPlayer(playerItem: AVPlayerItem(asset: PhoneAsset(item, device)))
+                player?.play()
+            }
+            .onDisappear { player?.pause() }
     }
 }
 

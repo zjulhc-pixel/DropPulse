@@ -34,7 +34,7 @@
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>
-	<string>MTP kernel: Kalam from OpenMTP © Ganesh Rathinavel (MIT). libusb (LGPL-2.1).</string>
+	<string>Inspired by OpenMTP.</string>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>

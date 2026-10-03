@@ -135,7 +135,10 @@ struct TransferRow: View {
                                     : "\(itemCount(transfer.count)) → Phone › \(transfer.destination)")
                     .fontWeight(.medium).lineLimit(1)
                 Spacer()
-                if transfer.state == .done, let file = transfer.finished {
+                if transfer.isActive {
+                    Button("Stop", systemImage: "xmark.circle.fill") { transfer.cancel() }
+                        .labelStyle(.iconOnly).buttonStyle(.borderless).foregroundStyle(.secondary)
+                } else if transfer.state == .done, let file = transfer.finished {
                     Button("Show in Finder", systemImage: "magnifyingglass") {
                         NSWorkspace.shared.activateFileViewerSelecting([file])
                     }
@@ -147,17 +150,17 @@ struct TransferRow: View {
                 Text("Waiting…").font(.caption).foregroundStyle(.secondary)
             case .running:
                 ProgressView(value: transfer.fraction)
-                if let p = transfer.progress {
-                    HStack {
-                        Text(p.name).lineLimit(1).truncationMode(.middle)
-                        Spacer()
-                        Text("\(p.bulkFileSize.sent.formatted(.byteCount(style: .file))) of \(p.bulkFileSize.total.formatted(.byteCount(style: .file))) · \(Int(p.speed)) MB/s")
-                            .monospacedDigit()
-                    }
-                    .font(.caption).foregroundStyle(.secondary)
+                HStack {
+                    Text(transfer.current).lineLimit(1).truncationMode(.middle)
+                    Spacer()
+                    Text("\(transfer.sent.formatted(.byteCount(style: .file))) of \(transfer.total.formatted(.byteCount(style: .file))) · \(Int64(transfer.speed).formatted(.byteCount(style: .file)))/s")
+                        .monospacedDigit()
                 }
+                .font(.caption).foregroundStyle(.secondary)
             case .done:
                 Text("Done").font(.caption).foregroundStyle(.secondary)
+            case .cancelled:
+                Text("Stopped").font(.caption).foregroundStyle(.secondary)
             case .failed(let message):
                 Text(message).font(.caption).foregroundStyle(.red)
             }

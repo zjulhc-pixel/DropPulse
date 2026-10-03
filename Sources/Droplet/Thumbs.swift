@@ -1,90 +1,147 @@
 import AppKit
+import AVFoundation
+import CoreImage
 import CryptoKit
 import ImageIO
 import UniformTypeIdentifiers
 
-/// Photo thumbnails. Kalam can't read MTP thumbnails, so visible photos are downloaded in
-/// small batches, downsampled, and kept on disk. Tiles that scroll away cancel their request,
-/// and the newest requests go first, so the grid fills where the user is looking.
+/// Thumbnails without copying whole files: photos use the small JPEG the camera embeds in
+/// the Exif block near the start of the file, videos let AVFoundation read just the index and
+/// first frame. Results are kept in memory and on disk.
 @MainActor final class Thumbs {
     static let shared = Thumbs()
 
     private let memory = NSCache<NSString, NSImage>()
-    private var waiting: [String: [CheckedContinuation<NSImage?, Never>]] = [:]
-    private var queue: [PhoneItem] = []
-    private var busy = false
     private let dir = Store.shared.cacheDir.appending(path: "thumbs")
 
     func image(for item: PhoneItem) async -> NSImage? {
-        let key = Self.key(item)
+        let key = "\(item.path)|\(item.size)|\(item.date.timeIntervalSince1970)".stableHash
         if let image = memory.object(forKey: key as NSString) { return image }
         let file = dir.appending(path: key + ".jpg")
-        if let data = await Task.detached(operation: { try? Data(contentsOf: file) }).value, let image = NSImage(data: data) {
-            memory.setObject(image, forKey: key as NSString)
-            return image
-        }
-        guard !Task.isCancelled else { return nil }
-        return await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in
-                waiting[key, default: []].append(continuation)
-                queue.append(item)
-                pump()
+        var data = await Task.detached { try? Data(contentsOf: file) }.value
+        if data == nil, let mtp = Store.shared.device, !Task.isCancelled {
+            data = await Self.make(item, mtp)
+            if let data {
+                try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                try? data.write(to: file)
             }
-        } onCancel: {
-            Task { @MainActor in self.cancel(item) }
         }
+        guard let data, let image = NSImage(data: data) else { return nil }
+        memory.setObject(image, forKey: key as NSString)
+        return image
     }
 
-    private func cancel(_ item: PhoneItem) {
-        queue.removeAll { $0 == item }
-        waiting.removeValue(forKey: Self.key(item))?.forEach { $0.resume(returning: nil) }
+    nonisolated private static func make(_ item: PhoneItem, _ mtp: MTP) async -> Data? {
+        var image: CGImage?
+        if item.kind == .video {
+            let generator = AVAssetImageGenerator(asset: PhoneAsset(item, mtp))
+            generator.maximumSize = CGSize(width: 480, height: 480)
+            generator.appliesPreferredTrackTransform = true
+            image = try? await generator.image(at: .zero).image
+        } else if let head = try? await mtp.read(item, length: 128 << 10), let thumb = exifThumbnail(head) {
+            image = thumb
+        } else if ["jpg", "jpeg"].contains(item.ext), let data = try? await mtp.thumbnail(item),
+                  let source = CGImageSourceCreateWithData(data as CFData, nil) {
+            image = CGImageSourceCreateImageAtIndex(source, 0, nil)
+        } else if item.size < 40 << 20, let whole = try? await mtp.read(item, length: Int(item.size)),
+                  let source = CGImageSourceCreateWithData(whole as CFData, nil) {
+            image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceThumbnailMaxPixelSize: 480,
+            ] as CFDictionary)
+        }
+        guard let image else { return nil }
+        let out = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(out, UTType.jpeg.identifier as CFString, 1, nil) else { return nil }
+        CGImageDestinationAddImage(destination, image, [kCGImageDestinationLossyCompressionQuality: 0.85] as CFDictionary)
+        return CGImageDestinationFinalize(destination) ? out as Data : nil
     }
 
-    private func pump() {
-        guard !busy, !queue.isEmpty, let sid = Store.shared.storage?.Sid else { return }
-        busy = true
-        let batch = Array(queue.suffix(6))
-        queue.removeLast(batch.count)
-        let dir = dir
-        Task {
-            let made = await Task.detached { await Self.render(batch, sid: sid, into: dir) }.value
-            for item in batch {
-                let key = Self.key(item)
-                let image = made.contains(key) ? NSImage(contentsOf: dir.appending(path: key + ".jpg")) : nil
-                if let image { memory.setObject(image, forKey: key as NSString) }
-                waiting.removeValue(forKey: key)?.forEach { $0.resume(returning: image) }
+    /// The JPEG in Exif IFD1 (JPEG APP1 or a HEIC Exif item), turned upright.
+    nonisolated static func exifThumbnail(_ data: Data) -> CGImage? {
+        // The Exif header is followed by a TIFF header ("II*" or "MM*"). In HEIC, "Exif" also
+        // appears earlier as an item type name, so look for the real one.
+        var search = data.startIndex..<data.endIndex
+        var found: Int?
+        while found == nil, let marker = data.range(of: Data("Exif\0\0".utf8), in: search) {
+            let header = data.dropFirst(marker.upperBound - data.startIndex).prefix(3)
+            if Array(header) == [0x49, 0x49, 0x2A] || Array(header) == [0x4D, 0x4D, 0x00] { found = marker.upperBound }
+            search = marker.upperBound..<data.endIndex
+        }
+        guard let tiff = found else { return nil }
+        let little = data[tiff] == 0x49
+        func number(_ offset: Int, _ size: Int) -> Int {
+            let start = tiff + offset
+            guard offset >= 0, start + size <= data.count else { return 0 }
+            let bytes = data[start..<start + size]
+            return (little ? bytes.reversed() : Array(bytes)).reduce(0) { $0 << 8 | Int($1) }
+        }
+        func entries(_ ifd: Int) -> [(tag: Int, value: Int)] {
+            (0..<number(ifd, 2)).map { i in
+                let entry = ifd + 2 + 12 * i
+                let type = number(entry + 2, 2)
+                return (number(entry, 2), type == 3 ? number(entry + 8, 2) : number(entry + 8, 4))
             }
-            busy = false
-            pump()
         }
+        let ifd0 = number(4, 4)
+        let orientation = entries(ifd0).first { $0.tag == 0x112 }?.value ?? 1
+        let ifd1 = number(ifd0 + 2 + 12 * number(ifd0, 2), 4)
+        let tags = Dictionary(entries(ifd1).map { ($0.tag, $0.value) }, uniquingKeysWith: { a, _ in a })
+        guard ifd1 > 0, let offset = tags[0x201], let length = tags[0x202], length > 0,
+              tiff + offset + length <= data.count,
+              let ci = CIImage(data: data[tiff + offset..<tiff + offset + length])
+        else { return nil }
+        let upright = ci.oriented(CGImagePropertyOrientation(rawValue: UInt32(orientation)) ?? .up)
+        return context.createCGImage(upright, from: upright.extent)
     }
 
-    nonisolated private static func render(_ items: [PhoneItem], sid: Int, into dir: URL) async -> Set<String> {
-        let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
-        try? FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: temp) }
-        guard (try? await Kalam.shared.download(sid, items.map(\.path), to: temp)) != nil else { return [] }
+    nonisolated private static let context = CIContext()
+}
 
-        var made = Set<String>()
-        let options = [kCGImageSourceCreateThumbnailFromImageAlways: true,
-                       kCGImageSourceCreateThumbnailWithTransform: true,
-                       kCGImageSourceThumbnailMaxPixelSize: 400] as CFDictionary
-        for item in items {
-            let key = key(item)
-            guard let source = CGImageSourceCreateWithURL(temp.appending(path: item.name) as CFURL, nil),
-                  let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options),
-                  let out = CGImageDestinationCreateWithURL(dir.appending(path: key + ".jpg") as CFURL,
-                                                            UTType.jpeg.identifier as CFString, 1, nil)
-            else { continue }
-            CGImageDestinationAddImage(out, image, [kCGImageDestinationLossyCompressionQuality: 0.8] as CFDictionary)
-            if CGImageDestinationFinalize(out) { made.insert(key) }
-        }
-        return made
+/// A video on the phone that AVFoundation reads on demand, for thumbnails and streaming playback.
+final class PhoneAsset: AVURLAsset, @unchecked Sendable {
+    private let loader: Loader
+
+    init(_ item: PhoneItem, _ mtp: MTP) {
+        loader = Loader(item: item, mtp: mtp)
+        super.init(url: URL(string: "droplet://\(item.handle)/video.\(item.ext)")!, options: nil)
+        resourceLoader.setDelegate(loader, queue: .global(qos: .userInitiated))
     }
 
-    nonisolated static func key(_ item: PhoneItem) -> String {
-        "\(item.path)|\(item.size)|\(item.date.timeIntervalSince1970)".stableHash
+    private final class Loader: NSObject, AVAssetResourceLoaderDelegate, @unchecked Sendable {
+        let item: PhoneItem
+        let mtp: MTP
+
+        init(item: PhoneItem, mtp: MTP) { self.item = item; self.mtp = mtp }
+
+        func resourceLoader(_ loader: AVAssetResourceLoader,
+                            shouldWaitForLoadingOfRequestedResource request: AVAssetResourceLoadingRequest) -> Bool {
+            Task {
+                if let info = request.contentInformationRequest {
+                    info.contentType = (UTType(filenameExtension: item.ext) ?? .movie).identifier
+                    info.contentLength = item.size
+                    info.isByteRangeAccessSupported = true
+                }
+                if let wanted = request.dataRequest {
+                    var offset = wanted.currentOffset
+                    let end = wanted.requestsAllDataToEndOfResource ? item.size : wanted.requestedOffset + Int64(wanted.requestedLength)
+                    do {
+                        while offset < end, !request.isCancelled {
+                            let chunk = try await mtp.read(item, offset: offset, length: Int(min(end - offset, 1 << 20)))
+                            guard !chunk.isEmpty else { break }
+                            wanted.respond(with: chunk)
+                            offset += Int64(chunk.count)
+                        }
+                    } catch {
+                        request.finishLoading(with: error)
+                        return
+                    }
+                }
+                request.finishLoading()
+            }
+            return true
+        }
     }
 }
 

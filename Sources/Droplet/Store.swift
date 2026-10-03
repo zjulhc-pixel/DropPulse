@@ -20,24 +20,32 @@ enum Prefs {
 }
 
 @MainActor @Observable final class Transfer: Identifiable {
-    enum State: Equatable { case waiting, running, done, failed(String) }
+    enum State: Equatable { case waiting, running, done, cancelled, failed(String) }
 
     let id = UUID()
     let toMac: Bool
     let count: Int
     let destination: String
     var state = State.waiting
-    var progress: TransferProgress?
+    var total: Int64 = 0
+    var sent: Int64 = 0
+    var current = ""
+    var started = Date.now
     var finished: URL?             // first copied file, for "Show in Finder"
+    var task: Task<Void, Never>?
 
     init(toMac: Bool, count: Int, destination: String) {
         self.toMac = toMac; self.count = count; self.destination = destination
     }
 
     var isActive: Bool { state == .waiting || state == .running }
-    var fraction: Double {
-        guard let p = progress, p.bulkFileSize.total > 0 else { return state == .done ? 1 : 0 }
-        return min(1, Double(p.bulkFileSize.sent) / Double(p.bulkFileSize.total))
+    var fraction: Double { total > 0 ? min(1, Double(sent) / Double(total)) : state == .done ? 1 : 0 }
+    var speed: Double { Double(sent) / max(0.001, Date.now.timeIntervalSince(started)) }
+    func cancel() { task?.cancel() }
+
+    /// Called from the MTP queue for every chunk.
+    nonisolated func advance(_ bytes: Int64) {
+        Task { @MainActor in sent += bytes }
     }
 }
 
@@ -49,7 +57,7 @@ enum Prefs {
 
     // Connection
     private(set) var phase = Phase.searching
-    private(set) var device: DeviceInfo?
+    private(set) var device: MTP?
     private(set) var storage: Storage?
     private var ejectedSerial: String?
 
@@ -71,62 +79,63 @@ enum Prefs {
     private(set) var transfers: [Transfer] = []
     private var transferTail: Task<Void, Never>?
     var previewURL: URL?
+    var playing: PhoneItem?
     var alert: String?
     var confirmDelete: [PhoneItem]?
     var renaming: PhoneItem?
     var creatingFolder = false
     var replacePrompt: (count: Int, answer: CheckedContinuation<Bool?, Never>)?
 
-    private let kalam = Kalam.shared
-    private var sid: Int { storage?.Sid ?? 0 }
     let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appending(path: "Droplet")
 
     private init() {
         Task { await monitor() }
+        NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated { Store.shared.device?.closeNow() }
+        }
     }
 
     // MARK: Connection
 
     var isConnected: Bool { phase == .connected }
 
-    /// One loop drives connecting, unlock detection, unplug detection and free-space refresh.
+    /// Looks for a phone while none is connected, waits for unlocking, refreshes free space.
+    /// Unplugging is reported instantly by the USB interface itself.
     private func monitor() async {
         var tick = 0
         while true {
             switch phase {
             case .connected:
-                if let device, !USB.isPresent(serial: device.serial) { await disconnect() }
-                else if tick % 5 == 0, !transfers.contains(where: \.isActive) {
-                    storage = try? await kalam.storages().first ?? storage
+                if tick % 5 == 0, !transfers.contains(where: \.isActive), let device {
+                    storage = (try? await device.storage()) ?? storage
                 }
             case .locked:
-                if let device, !USB.isPresent(serial: device.serial) { await disconnect() }
-                else { await loadStorage() }
+                await loadStorage()
             case .searching, .busy:
-                if let serial = ejectedSerial {
-                    if !USB.isPresent(serial: serial) { ejectedSerial = nil }
+                if let service = MTP.findInterface() {
+                    let serial = MTP.serial(of: service)
+                    if serial != ejectedSerial { await connect(service) }
+                    IOObjectRelease(service)
                 } else {
-                    await connect()
+                    ejectedSerial = nil
                 }
             }
             tick += 1
-            try? await Task.sleep(for: .seconds(phase == .connected ? 1 : 1.5))
+            try? await Task.sleep(for: .seconds(1))
         }
     }
 
-    private func connect() async {
+    private func connect(_ service: io_service_t) async {
         do {
-            device = try await kalam.initialize()
+            device = try await MTP.connect(service) { Task { @MainActor in await Store.shared.disconnect() } }
             await loadStorage()
-        } catch let error as KalamError {
-            phase = ["ErrorMtpLockExists", "ErrorDeviceSetup", "ErrorMultipleDevice"].contains(error.type) ? .busy : .searching
         } catch {
-            phase = .searching
+            phase = .busy                // another app holds the phone, or it isn't answering yet
         }
     }
 
     private func loadStorage() async {
-        guard let first = try? await kalam.storages().first else { phase = .locked; return }
+        guard let device, let first = try? await device.storage() else { phase = .locked; return }
         storage = first
         if UserDefaults.standard.object(forKey: lastImportKey) == nil {
             UserDefaults.standard.set(Date.now.timeIntervalSince1970, forKey: lastImportKey)
@@ -138,10 +147,13 @@ enum Prefs {
     }
 
     private func disconnect() async {
-        await kalam.dispose()
+        guard let device else { return }
+        self.device = nil
+        transfers.forEach { $0.cancel() }
+        await device.close()
         withAnimation(.smooth) {
             phase = .searching
-            device = nil; storage = nil
+            storage = nil
             listings = [:]; selection = []; history = ([], []); path = "/"
         }
     }
@@ -188,11 +200,11 @@ enum Prefs {
     /// Cached listings show instantly; the phone is re-read in the background.
     func refresh(_ target: String? = nil) async {
         let target = target ?? path
-        guard isConnected else { return }
+        guard let device else { return }
         if listings[target] == nil, target == path { loading = true }
         defer { if target == path { loading = false } }
         do {
-            let items = try await kalam.list(sid, target, hidden: Prefs.showHidden)
+            let items = try await device.list(target, hidden: Prefs.showHidden)
             let sorted = items.sorted { a, b in
                 a.isFolder != b.isFolder ? a.isFolder : a.isFolder ? a.name.localizedStandardCompare(b.name) == .orderedAscending : a.date > b.date
             }
@@ -205,7 +217,11 @@ enum Prefs {
     }
 
     func activate(_ item: PhoneItem) {
-        if item.isFolder { open(item.path) } else { preview(item) }
+        switch item.kind {
+        case .folder: open(item.path)
+        case .video: playing = item
+        default: preview(item)
+        }
     }
 
     func selectAll() { selection = Set(items.map(\.id)) }
@@ -234,9 +250,14 @@ enum Prefs {
     }
 
     private func checkFavorites() async {
-        let others = favorites.filter { $0 != "/" }
-        guard let found = try? await kalam.existing(sid, others) else { return }
-        missing = Set(others).subtracting(found)
+        guard let device else { return }
+        var absent = Set<String>()
+        for path in favorites where path != "/" {
+            let parent = (path as NSString).deletingLastPathComponent
+            let names = (try? await device.list(parent, hidden: true).map(\.name)) ?? []
+            if !names.contains((path as NSString).lastPathComponent) { absent.insert(path) }
+        }
+        missing = absent
     }
 
     // MARK: Import new photos
@@ -267,15 +288,28 @@ enum Prefs {
             let size = (try? folder.appending(path: item.name).resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init)
             return item.isFolder || size != item.size
         }
-        guard !todo.isEmpty else { then?(); return }
-        let sid = sid
-        enqueue(Transfer(toMac: true, count: todo.count, destination: folder.lastPathComponent)) { [kalam] transfer in
-            // Download into a staging folder on the same volume, then move with Finder-style
-            // unique names so nothing on the Mac is ever overwritten.
+        guard let device, !todo.isEmpty else { then?(); return }
+        enqueue(Transfer(toMac: true, count: todo.count, destination: folder.lastPathComponent)) { transfer in
+            var files: [(item: PhoneItem, relative: String)] = []
+            for item in todo {
+                files.append((item, item.name))
+                if item.isFolder { files += try await device.walk(item) }
+            }
+            transfer.total = files.reduce(0) { $0 + $1.item.size }
+            // Copy into a staging folder on the same volume, then move with Finder-style
+            // unique names, so nothing on the Mac is ever overwritten or left half-written.
             let stage = folder.appending(path: ".droplet-\(UUID().uuidString)")
-            try FileManager.default.createDirectory(at: stage, withIntermediateDirectories: true)
             defer { try? FileManager.default.removeItem(at: stage) }
-            try await kalam.download(sid, todo.map(\.path), to: stage) { p in Task { @MainActor in transfer.progress = p } }
+            for (item, relative) in files {
+                let target = stage.appending(path: relative)
+                if item.isFolder {
+                    try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+                } else {
+                    try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+                    transfer.current = item.name
+                    try await device.download(item, to: target, progress: transfer.advance)
+                }
+            }
             for file in try FileManager.default.contentsOfDirectory(at: stage, includingPropertiesForKeys: nil) {
                 let target = folder.uniqueChild(file.lastPathComponent)
                 try FileManager.default.moveItem(at: file, to: target)
@@ -297,14 +331,28 @@ enum Prefs {
         if panel.runModal() == .OK, let url = panel.url { copyToMac(items, to: url) }
     }
 
-    /// Downloads one item into the cache (for Quick Look, opening, and dragging to Finder).
+    /// Copies one item into the cache (for Quick Look, opening, and dragging to Finder).
     func fetch(_ item: PhoneItem) async throws -> URL {
+        guard let device else { throw MTPError(String(localized: "The phone is disconnected.")) }
         let dir = cacheDir.appending(path: "files").appending(path: item.path.stableHash)
         let url = dir.appending(path: item.name)
         if (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) == item.size { return url }
         try? FileManager.default.removeItem(at: dir)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        try await kalam.download(sid, [item.path], to: dir)
+        if item.isFolder {
+            for (child, relative) in try await device.walk(item) {
+                let target = dir.appending(path: relative)
+                if child.isFolder {
+                    try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+                } else {
+                    try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+                    try await device.download(child, to: target)
+                }
+            }
+            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        } else {
+            try await device.download(item, to: url)
+        }
         return url
     }
 
@@ -325,25 +373,28 @@ enum Prefs {
     func sendToPhone(_ urls: [URL], to folder: String? = nil) {
         let folder = folder ?? path
         let urls = urls.filter { !$0.path.hasPrefix(cacheDir.path) }      // ignore our own drags
-        guard isConnected, !urls.isEmpty else { return }
+        guard let device, !urls.isEmpty else { return }
         Task {
             var urls = urls
-            let targets = urls.map { (folder as NSString).appendingPathComponent($0.lastPathComponent) }
-            let existing = (try? await kalam.existing(sid, targets)) ?? []
+            let existing = ((try? await device.list(folder, hidden: true)) ?? [])
+                .filter { item in urls.contains { $0.lastPathComponent == item.name } }
             if !existing.isEmpty {
                 let replace = await withCheckedContinuation { replacePrompt = (existing.count, $0) }
                 replacePrompt = nil
                 switch replace {
-                case true?: try? await kalam.delete(sid, Array(existing))
-                case false?: urls = zip(urls, targets).filter { !existing.contains($0.1) }.map(\.0)
+                case true?: for item in existing { try? await device.delete(item) }
+                case false?: urls.removeAll { url in existing.contains { $0.name == url.lastPathComponent } }
                 case nil: return
                 }
             }
             guard !urls.isEmpty else { return }
-            let sid = sid
-            let name = folder == "/" ? device?.name ?? "" : (folder as NSString).lastPathComponent
-            enqueue(Transfer(toMac: false, count: urls.count, destination: name)) { [kalam] transfer in
-                try await kalam.upload(sid, urls, to: folder) { p in Task { @MainActor in transfer.progress = p } }
+            let name = folder == "/" ? device.name : (folder as NSString).lastPathComponent
+            enqueue(Transfer(toMac: false, count: urls.count, destination: name)) { transfer in
+                transfer.total = urls.reduce(0) { $0 + $1.totalSize }
+                for url in urls {
+                    transfer.current = url.lastPathComponent
+                    try await device.upload(url, to: folder, progress: transfer.advance)
+                }
                 await self.refresh(folder)
             }
         }
@@ -360,25 +411,26 @@ enum Prefs {
     // MARK: Editing on the phone
 
     func delete(_ items: [PhoneItem]) {
+        guard let device else { return }
         Task {
-            do { try await kalam.delete(sid, items.map(\.path)) } catch { alert = error.localizedDescription }
+            do { for item in items { try await device.delete(item) } } catch { alert = error.localizedDescription }
             selection.subtract(items.map(\.id))
             await refresh()
         }
     }
 
     func rename(_ item: PhoneItem, to name: String) {
-        guard !name.isEmpty, name != item.name else { return }
+        guard let device, !name.isEmpty, name != item.name else { return }
         Task {
-            do { try await kalam.rename(sid, item.path, to: name) } catch { alert = error.localizedDescription }
+            do { try await device.rename(item, to: name) } catch { alert = error.localizedDescription }
             await refresh()
         }
     }
 
     func makeFolder(_ name: String) {
-        guard !name.isEmpty else { return }
+        guard let device, !name.isEmpty else { return }
         Task {
-            do { try await kalam.makeFolder(sid, (path as NSString).appendingPathComponent(name)) }
+            do { try await device.makeFolder((path as NSString).appendingPathComponent(name)) }
             catch { alert = error.localizedDescription }
             await refresh()
         }
@@ -391,17 +443,22 @@ enum Prefs {
     private func enqueue(_ transfer: Transfer, _ work: @escaping @MainActor (Transfer) async throws -> Void) {
         withAnimation(.snappy) { transfers.insert(transfer, at: 0) }
         let previous = transferTail
-        transferTail = Task {
+        transfer.task = Task {
             await previous?.value
+            guard !Task.isCancelled else { transfer.state = .cancelled; return }
             transfer.state = .running
+            transfer.started = .now
             do {
                 try await work(transfer)
                 transfer.state = .done
+            } catch is CancellationError {
+                transfer.state = .cancelled
             } catch {
                 transfer.state = .failed(error.localizedDescription)
             }
             if transfers.count > 20 { transfers.removeLast(transfers.count - 20) }
         }
+        transferTail = transfer.task
     }
 }
 
@@ -416,20 +473,11 @@ extension URL {
         }
         return candidate
     }
-}
 
-enum USB {
-    /// Cheap IORegistry lookup, used to notice unplugging without touching the MTP session.
-    static func isPresent(serial: String) -> Bool {
-        var iterator: io_iterator_t = 0
-        guard IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("IOUSBHostDevice"), &iterator) == KERN_SUCCESS
-        else { return true }
-        defer { IOObjectRelease(iterator) }
-        while case let service = IOIteratorNext(iterator), service != 0 {
-            defer { IOObjectRelease(service) }
-            let value = IORegistryEntryCreateCFProperty(service, "USB Serial Number" as CFString, kCFAllocatorDefault, 0)
-            if value?.takeRetainedValue() as? String == serial { return true }
-        }
-        return false
+    /// Size of a file, or of everything inside a folder.
+    var totalSize: Int64 {
+        let files = FileManager.default.enumerator(at: self, includingPropertiesForKeys: [.fileSizeKey])?
+            .compactMap { (try? ($0 as? URL)?.resourceValues(forKeys: [.fileSizeKey]))?.fileSize } ?? []
+        return Int64(files.reduce(0, +) + ((try? resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0))
     }
 }
