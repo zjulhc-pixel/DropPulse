@@ -1,20 +1,31 @@
 import SwiftUI
 
+/// The sidebar's three states, stepped through by one toolbar button and ⌃⌘S.
+enum SidebarMode: String {
+    case full, icons, hidden
+
+    var next: SidebarMode { self == .full ? .icons : self == .icons ? .hidden : .full }
+    var symbol: String { self == .full ? "sidebar.left" : self == .icons ? "sidebar.squares.left" : "rectangle" }
+    var title: LocalizedStringKey { self == .full ? "Show Sidebar" : self == .icons ? "Sidebar Icons Only" : "Hide Sidebar" }
+}
+
 struct RootView: View {
     @Bindable private var store = Store.shared
-    @AppStorage("sidebarIconsOnly") private var iconsOnly = false
-    @State private var columns = UserDefaults.standard.bool(forKey: "sidebarIconsOnly") ? NavigationSplitViewVisibility.detailOnly : .all
+    @AppStorage("sidebarMode") private var mode = SidebarMode.full
+    @State private var columns = UserDefaults.standard.string(forKey: "sidebarMode") ?? "full" == "full"
+        ? NavigationSplitViewVisibility.all : .detailOnly
     @State private var newName = ""
 
     var body: some View {
-        // Three sidebar states: full (the split view's sidebar), icons only (sidebar hidden, a glass
-        // rail inside the content), and hidden (⌃⌘S or the toolbar button).
+        // Full is the split view's sidebar; icons only hides it and shows a glass rail inside
+        // the content; hidden shows neither.
         NavigationSplitView(columnVisibility: $columns) {
             Sidebar()
                 .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 320)
+                .toolbar(removing: .sidebarToggle)
         } detail: {
             HStack(alignment: .top, spacing: 0) {
-                if iconsOnly && columns == .detailOnly {
+                if mode == .icons {
                     IconRail()
                         .padding(.leading, 10)
                         .padding(.top, 8)
@@ -22,9 +33,21 @@ struct RootView: View {
                 }
                 if store.isConnected { Browser() } else { ConnectView() }
             }
+            .toolbar {
+                ToolbarItem(placement: .navigation) {
+                    Button(mode.next.title, systemImage: mode.symbol) { mode = mode.next }
+                        .help(mode.next.title)
+                }
+            }
         }
-        .onChange(of: iconsOnly) { withAnimation(.snappy) { columns = iconsOnly ? .detailOnly : .all } }
-        .onChange(of: columns) { if columns != .detailOnly, iconsOnly { iconsOnly = false } }
+        .onChange(of: mode) { withAnimation(.snappy) { columns = mode == .full ? .all : .detailOnly } }
+        .onChange(of: columns) {
+            // The sidebar can also be dragged shut or open.
+            if columns == .all, mode != .full { mode = .full }
+            if columns == .detailOnly, mode == .full { mode = .hidden }
+        }
+        .onAppear { DispatchQueue.main.async(execute: fitWindowToScreen) }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didChangeScreenNotification)) { _ in fitWindowToScreen() }
         .alert("Something went wrong", isPresented: Binding(get: { store.alert != nil }, set: { _ in store.alert = nil })) {
         } message: {
             Text(store.alert ?? "")
@@ -64,7 +87,6 @@ struct RootView: View {
 }
 
 struct Sidebar: View {
-    @AppStorage("sidebarIconsOnly") private var iconsOnly = false
     private var store = Store.shared
 
     var body: some View {
@@ -85,21 +107,12 @@ struct Sidebar: View {
                         }
                 }
             }
-            .disabled(!store.isConnected)
-        }
-        .safeAreaInset(edge: .bottom, alignment: .leading) {
-            Button("Icons Only", systemImage: "sidebar.squares.left") { iconsOnly = true }
-                .labelStyle(.iconOnly)
-                .buttonStyle(.borderless)
-                .help("Icons Only")
-                .padding(12)
         }
     }
 }
 
 /// The sidebar folded down to its icons: a floating glass column beside the content.
 private struct IconRail: View {
-    @AppStorage("sidebarIconsOnly") private var iconsOnly = false
     private var store = Store.shared
 
     var body: some View {
@@ -120,12 +133,6 @@ private struct IconRail: View {
                     .help(title)
                     .dropDestination(for: URL.self) { urls, _ in store.sendToPhone(urls, to: path); return true }
             }
-            .disabled(!store.isConnected)
-            Divider().frame(width: 24)
-            Button("Show Names", systemImage: "sidebar.left") { iconsOnly = false }
-                .labelStyle(.iconOnly)
-                .frame(width: 40, height: 40)
-                .help("Show Names")
         }
         .buttonStyle(.borderless)
         .padding(.vertical, 8)
@@ -160,6 +167,18 @@ private struct DeviceCard: View {
         }
         .padding(.vertical, 6)
     }
+}
+
+/// A window saved on a taller screen can come back taller than this one, leaving its bottom
+/// edge out of reach. Keep it within the screen.
+@MainActor func fitWindowToScreen() {
+    guard let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "main" }),
+          let visible = window.screen?.visibleFrame else { return }
+    var frame = window.frame
+    frame.size = CGSize(width: min(frame.width, visible.width), height: min(frame.height, visible.height))
+    frame.origin.x = min(max(frame.minX, visible.minX), visible.maxX - frame.width)
+    frame.origin.y = min(max(frame.minY, visible.minY), visible.maxY - frame.height)
+    if frame != window.frame { window.setFrame(frame, display: true, animate: true) }
 }
 
 func folderTitle(_ path: String, device: String?) -> String {

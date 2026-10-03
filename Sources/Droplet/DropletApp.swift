@@ -79,11 +79,9 @@ private struct MenuBarIcon: View {
 
 private struct DropletCommands: Commands {
     let store: Store
-    @AppStorage("sidebarIconsOnly") private var sidebarIconsOnly = false
+    @AppStorage("sidebarMode") private var sidebarMode = SidebarMode.full
 
     var body: some Commands {
-        SidebarCommands()
-
         CommandGroup(replacing: .newItem) {
             Button("New Folder") { store.creatingFolder = true }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
@@ -106,8 +104,8 @@ private struct DropletCommands: Commands {
             }
             .pickerStyle(.inline)
             Divider()
-            Toggle("Sidebar Icons Only", isOn: $sidebarIconsOnly)
-                .keyboardShortcut("s", modifiers: [.command, .option])
+            Button(sidebarMode.next.title) { sidebarMode = sidebarMode.next }
+                .keyboardShortcut("s", modifiers: [.command, .control])
         }
 
         CommandMenu("Go") {

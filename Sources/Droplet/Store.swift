@@ -65,6 +65,7 @@ enum Prefs {
 
     // Browsing
     private(set) var path = "/"
+    private var pickedWhileWaiting: String?          // a sidebar folder chosen before the phone arrives
     private(set) var history: (back: [String], forward: [String]) = ([], [])
     private(set) var listings: [String: [PhoneItem]] = [:]
     private(set) var loading = false
@@ -160,7 +161,8 @@ enum Prefs {
         }
         withAnimation(.smooth) { phase = .connected }
         await checkFavorites()
-        open(missing.contains(Self.cameraPath) ? "/" : Self.cameraPath, record: false)
+        open(pickedWhileWaiting ?? (missing.contains(Self.cameraPath) ? "/" : Self.cameraPath), record: false)
+        pickedWhileWaiting = nil
         if path != Self.cameraPath { await refresh(Self.cameraPath) }      // prefetch for "Import New"
     }
 
@@ -193,6 +195,7 @@ enum Prefs {
     var selectedItems: [PhoneItem] { items.filter { selection.contains($0.id) } }
 
     func open(_ newPath: String, record: Bool = true) {
+        if !isConnected { pickedWhileWaiting = newPath }
         guard newPath != path || listings[newPath] == nil else { return }
         if record { history.back.append(path); history.forward = [] }
         path = newPath
@@ -279,9 +282,13 @@ enum Prefs {
 
     private static func dateKey(_ item: PhoneItem) -> String { "\(item.path)|\(item.size)|\(item.date.timeIntervalSince1970)" }
 
+    /// Compiled once: a regex literal is rebuilt on every use, which for a big folder meant
+    /// seconds of main-thread work.
+    nonisolated(unsafe) private static let namePattern = /(20\d\d)[-_]?(\d\d)[-_]?(\d\d)[-_ T]?(\d\d)[-_.]?(\d\d)[-_.]?(\d\d)/
+
     /// "IMG20260607175302", "IMG_20260502_162437", "Screenshot_2026-09-30-14-22-10".
     nonisolated static func nameDate(_ name: String) -> Date? {
-        guard let match = name.firstMatch(of: /(20\d\d)[-_]?(\d\d)[-_]?(\d\d)[-_ T]?(\d\d)[-_.]?(\d\d)[-_.]?(\d\d)/),
+        guard let match = name.firstMatch(of: namePattern),
               let month = Int(match.2), (1...12).contains(month), let day = Int(match.3), (1...31).contains(day),
               let hour = Int(match.4), hour < 24, let minute = Int(match.5), minute < 60, let second = Int(match.6), second < 60
         else { return nil }
