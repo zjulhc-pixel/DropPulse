@@ -6,6 +6,20 @@ struct ConnectView: View {
     private var store = Store.shared
 
     var body: some View {
+        // In a scroll view so the guide never sets the window's minimum height: at the narrowest
+        // width its wrapped text would otherwise force the window taller than the screen.
+        GeometryReader { geometry in
+            ScrollView {
+                guide
+                    .padding(40)
+                    .frame(maxWidth: .infinity, minHeight: geometry.size.height)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+        }
+        .animation(.smooth, value: store.phase)
+    }
+
+    private var guide: some View {
         VStack(spacing: 32) {
             HStack(spacing: 18) {
                 Image(systemName: "laptopcomputer")
@@ -50,11 +64,9 @@ struct ConnectView: View {
                 .glassEffect()
                 Text("Still not detected? Quit apps that hold the USB connection, such as Android File Transfer or OpenMTP.")
                     .font(.callout).foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
             }
         }
-        .padding(40)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .animation(.smooth, value: store.phase)
     }
 
     private var status: LocalizedStringKey {
