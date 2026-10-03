@@ -14,7 +14,6 @@ import UniformTypeIdentifiers
     private let memory = NSCache<NSString, NSImage>()
     private let dir = Store.shared.cacheDir.appending(path: "thumbs")
     private var failed = Set<String>()          // tried this session: no thumbnail to be had
-    private var blank = Set<String>()           // all zeros on the phone: an unfinished copy
 
     func image(for item: PhoneItem) async -> NSImage? {
         let key = Self.key(item)
@@ -30,16 +29,13 @@ import UniformTypeIdentifiers
                 try? data.write(to: file)
             } else if !Task.isCancelled {
                 failed.insert(key)
-                if made.blank { blank.insert(key) }
+                if made.blank { Store.shared.markEmpty(item) }
             }
         }
         guard let data, let image = NSImage(data: data) else { return nil }
         memory.setObject(image, forKey: key as NSString)
         return image
     }
-
-    /// The file holds nothing but zeros, so there is no picture to show.
-    func isBlank(_ item: PhoneItem) -> Bool { blank.contains(Self.key(item)) }
 
     nonisolated private static func key(_ item: PhoneItem) -> String {
         "\(item.path)|\(item.size)|\(item.date.timeIntervalSince1970)".stableHash

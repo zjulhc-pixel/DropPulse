@@ -89,7 +89,9 @@ enum Prefs {
     var replacePrompt: (count: Int, answer: CheckedContinuation<Bool?, Never>)?
 
     let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appending(path: "Droplet")
-    private var takenCache: [String: Double] = [:]
+    private var takenCache: [String: Double] = [:]       // capture time, or emptyMark
+    private(set) var emptyFiles = Set<String>()          // all zeros on the phone: unfinished copies
+    private static let emptyMark = -1.0
     private var dating = Set<String>()
 
     private init() {
@@ -234,7 +236,9 @@ enum Prefs {
     private func arrange(_ items: [PhoneItem]) -> [PhoneItem] {
         items.map { item in
             var item = item
-            item.taken = Self.nameDate(item.name) ?? takenCache[Self.dateKey(item)].map(Date.init(timeIntervalSince1970:))
+            let cached = takenCache[Self.dateKey(item)]
+            if cached == Self.emptyMark { emptyFiles.insert(item.path) }
+            item.taken = Self.nameDate(item.name) ?? cached.flatMap { $0 == Self.emptyMark ? item.date : Date(timeIntervalSince1970: $0) }
             return item
         }
         .sorted { a, b in
@@ -255,7 +259,8 @@ enum Prefs {
         let pending = (listings[path] ?? []).filter { $0.kind == .image && $0.taken == nil }
         for (index, item) in pending.enumerated() {
             guard let head = try? await device.read(item, length: 64 << 10) else { continue }
-            takenCache[Self.dateKey(item)] = (Self.exifDate(head, size: item.size) ?? item.date).timeIntervalSince1970
+            if !head.isEmpty, !head.contains(where: { $0 != 0 }) { markEmpty(item) }
+            else { takenCache[Self.dateKey(item)] = (Self.exifDate(head, size: item.size) ?? item.date).timeIntervalSince1970 }
             if index % 40 == 39 || index == pending.count - 1, let items = listings[path] {
                 withAnimation(.snappy) { listings[path] = arrange(items) }
             }
@@ -264,6 +269,11 @@ enum Prefs {
     }
 
     private var takenFile: URL { cacheDir.appending(path: "taken.json") }
+
+    func markEmpty(_ item: PhoneItem) {
+        takenCache[Self.dateKey(item)] = Self.emptyMark
+        _ = withAnimation(.snappy) { emptyFiles.insert(item.path) }
+    }
 
     private static func dateKey(_ item: PhoneItem) -> String { "\(item.path)|\(item.size)|\(item.date.timeIntervalSince1970)" }
 
@@ -294,6 +304,10 @@ enum Prefs {
     }
 
     func activate(_ item: PhoneItem) {
+        if emptyFiles.contains(item.path) {
+            alert = String(localized: "“\(item.name)” is empty on the phone. It holds no picture, probably an unfinished copy.")
+            return
+        }
         switch item.kind {
         case .folder: open(item.path)
         case .video: playing = item

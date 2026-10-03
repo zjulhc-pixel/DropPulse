@@ -127,3 +127,6 @@
 "Droplet waits in the menu bar after you log in." = "登录后 Droplet 会在菜单栏待命。";
 
 "This file is empty on the phone — probably an unfinished copy." = "这个文件在手机上是空的，可能是一次未完成的拷贝。";
+"Empty Files" = "空文件";
+"These hold no picture on the phone, probably unfinished copies from another app." = "这些文件在手机上没有任何图像数据，可能是其他应用未完成的拷贝。";
+"“%@” is empty on the phone. It holds no picture, probably an unfinished copy." = "“%@”在手机上是空文件，里面没有图像，可能是一次未完成的拷贝。";

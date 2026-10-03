@@ -116,11 +116,20 @@ private struct GridBrowser: View {
                 if photoMode {
                     let folders = items.filter(\.isFolder)
                     if !folders.isEmpty { grid(folders, photo: false) }
-                    ForEach(days(files), id: \.day) { group in
+                    let empty = files.filter { store.emptyFiles.contains($0.path) }
+                    ForEach(days(files.filter { !store.emptyFiles.contains($0.path) }), id: \.day) { group in
                         Section {
                             grid(group.items, photo: true)
                         } header: {
-                            DayHeader(day: group.day, count: group.items.count)
+                            SectionHeader(title: DayHeader.title(group.day), count: group.items.count)
+                        }
+                    }
+                    if !empty.isEmpty {
+                        Section {
+                            grid(empty, photo: true)
+                        } header: {
+                            SectionHeader(title: String(localized: "Empty Files"), count: empty.count,
+                                          note: String(localized: "These hold no picture on the phone, probably unfinished copies from another app."))
                         }
                     }
                 } else {
@@ -168,21 +177,27 @@ private struct GridBrowser: View {
     }
 }
 
-private struct DayHeader: View {
-    let day: Date
+private struct SectionHeader: View {
+    let title: String
     let count: Int
+    var note: String?
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(title).font(.title3.bold())
-            Spacer()
-            Text(itemCount(count)).font(.callout).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(title).font(.title3.bold())
+                Spacer()
+                Text(itemCount(count)).font(.callout).foregroundStyle(.secondary)
+            }
+            if let note { Text(note).font(.callout).foregroundStyle(.secondary) }
         }
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity)
     }
+}
 
-    private var title: String {
+enum DayHeader {
+    static func title(_ day: Date) -> String {
         let calendar = Calendar.current
         if calendar.isDateInToday(day) { return String(localized: "Today") }
         if calendar.isDateInYesterday(day) { return String(localized: "Yesterday") }
@@ -282,7 +297,7 @@ struct Thumb: View {
                 .aspectRatio(contentMode: style == .fill ? .fill : .fit)
                 .clipShape(.rect(cornerRadius: style == .fill ? 0 : radius))
                 .transition(.opacity)
-        } else if failed, Thumbs.shared.isBlank(item) {
+        } else if Store.shared.emptyFiles.contains(item.path) {
             Image(systemName: "exclamationmark.triangle")
                 .font(.title2).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
