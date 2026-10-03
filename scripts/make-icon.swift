@@ -1,6 +1,6 @@
 // Renders the app icon (Resources/AppIcon.icns: a frosted-glass tile on deep blue holding the
 // "pd" monogram, a ring with two parallel slanted stems) and the menu bar template images
-// (Resources/MenuBar*Template.pdf: the monogram alone, solid when connected, faint when not).
+// (Resources/MenuBarTemplate.pdf: the monogram alone, solid black like other menu bar icons).
 // Usage: swift scripts/make-icon.swift Resources [preview.png]
 import AppKit
 
@@ -132,7 +132,7 @@ try task.run()
 task.waitUntilExit()
 
 /// Menu bar: an 18 pt vector template, the monogram filling its height.
-func menuBarIcon(_ name: String, alpha: CGFloat) {
+func menuBarIcon(_ name: String) {
     let size = CGFloat(18), glyph = monogram(), bounds = glyph.boundingBox
     let scale = (size - 1) / max(bounds.width, bounds.height)
     var fit = CGAffineTransform(translationX: size / 2, y: size / 2)
@@ -141,10 +141,9 @@ func menuBarIcon(_ name: String, alpha: CGFloat) {
     let pdf = CGContext(resources.appending(path: name) as CFURL, mediaBox: &page, nil)!
     pdf.beginPDFPage(nil)
     pdf.addPath(glyph.copy(using: &fit)!)
-    pdf.setFillColor(CGColor(gray: 0, alpha: alpha))
+    pdf.setFillColor(CGColor(gray: 0, alpha: 1))
     pdf.fillPath()
     pdf.endPDFPage()
     pdf.closePDF()
 }
-menuBarIcon("MenuBarTemplate.pdf", alpha: 1)
-menuBarIcon("MenuBarOffTemplate.pdf", alpha: 0.45)
+menuBarIcon("MenuBarTemplate.pdf")

@@ -48,7 +48,7 @@ open build/Droplet.app
 
 ## 图标
 
-App 图标和菜单栏图标都由 `scripts/make-icon.swift` 用矢量绘制，生成 `Resources/AppIcon.icns` 和 `Resources/MenuBar*Template.pdf`。修改设计后，删掉 `AppIcon.icns` 再运行 `./build.sh`，就会全部重新生成。
+App 图标和菜单栏图标都由 `scripts/make-icon.swift` 用矢量绘制，生成 `Resources/AppIcon.icns` 和 `Resources/MenuBarTemplate.pdf`。修改设计后，删掉 `AppIcon.icns` 再运行 `./build.sh`，就会全部重新生成。
 
 ## 致谢
 

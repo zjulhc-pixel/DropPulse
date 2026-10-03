@@ -60,7 +60,7 @@ private struct MenuBarIcon: View {
     private var store = Store.shared
 
     var body: some View {
-        Image(nsImage: NSImage(named: store.isConnected ? "MenuBarTemplate" : "MenuBarOffTemplate") ?? NSImage())
+        Image(nsImage: NSImage(named: "MenuBarTemplate") ?? NSImage())
             .task {
                 while !AppDelegate.launch.done { try? await Task.sleep(for: .milliseconds(20)) }
                 if !AppDelegate.launch.atLogin { show() }
