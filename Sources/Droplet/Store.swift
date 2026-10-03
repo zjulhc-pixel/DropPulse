@@ -59,6 +59,7 @@ enum Prefs {
     private(set) var phase = Phase.searching
     private(set) var device: MTP?
     private(set) var storage: Storage?
+    private(set) var busyOwner: String?          // the app holding the phone, when it isn't us
     private var ejectedSerial: String?
 
     // Browsing
@@ -114,6 +115,16 @@ enum Prefs {
             case .searching, .busy:
                 if let service = MTP.findInterface() {
                     let serial = MTP.serial(of: service)
+                    // macOS's image capture daemon grabs phones as they're plugged in. It restarts on
+                    // demand, so it is safe to stop; any other app is left alone and named instead.
+                    if let owner = MTP.owner(of: service), owner.name != "Droplet" {
+                        if owner.name == "ptpcamerad" {
+                            kill(owner.pid, SIGKILL)
+                            try? await Task.sleep(for: .milliseconds(200))
+                        } else {
+                            busyOwner = owner.name
+                        }
+                    }
                     if serial != ejectedSerial { await connect(service) }
                     IOObjectRelease(service)
                 } else {
@@ -128,6 +139,7 @@ enum Prefs {
     private func connect(_ service: io_service_t) async {
         do {
             device = try await MTP.connect(service) { Task { @MainActor in await Store.shared.disconnect() } }
+            busyOwner = nil
             await loadStorage()
         } catch {
             phase = .busy                // another app holds the phone, or it isn't answering yet

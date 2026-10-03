@@ -60,7 +60,7 @@ struct ConnectView: View {
     private var status: LocalizedStringKey {
         switch store.phase {
         case .locked: "Waiting for you to unlock \(store.device?.name ?? "")…"
-        case .busy: "Another app is using the phone…"
+        case .busy: store.busyOwner.map { "“\($0)” is using the phone…" } ?? "Another app is using the phone…"
         default: "Waiting for a device…"
         }
     }

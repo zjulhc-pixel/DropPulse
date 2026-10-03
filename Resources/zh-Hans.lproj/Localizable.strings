@@ -67,6 +67,7 @@
 "Still not detected? Quit apps that hold the USB connection, such as Android File Transfer or OpenMTP." = "还是识别不到？先退出 Android File Transfer、OpenMTP 等占用 USB 的应用。";
 "Waiting for you to unlock %@…" = "等待解锁 %@…";
 "Another app is using the phone…" = "手机正被其他应用占用…";
+"“%@” is using the phone…" = "手机正被“%@”占用…";
 "Waiting for a device…" = "正在等待设备…";
 
 /* Transfers */

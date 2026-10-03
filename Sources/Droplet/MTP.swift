@@ -69,6 +69,14 @@ actor MTP {
         property(device(of: service), "USB Serial Number") as? String ?? ""
     }
 
+    /// The process holding the interface exclusively, from IORegistry's "pid 123, name".
+    nonisolated static func owner(of service: io_service_t) -> (pid: pid_t, name: String)? {
+        guard let owner = property(service, "UsbExclusiveOwner") as? String,
+              let comma = owner.firstIndex(of: ","), let pid = pid_t(owner.dropFirst(4).prefix(upTo: comma))
+        else { return nil }
+        return (pid, owner[comma...].dropFirst().trimmingCharacters(in: .whitespaces))
+    }
+
     static func connect(_ service: io_service_t, onDetach: @escaping @Sendable () -> Void) async throws -> MTP {
         let mtp = try MTP(service, onDetach: onDetach)
         try await mtp.openSession()
