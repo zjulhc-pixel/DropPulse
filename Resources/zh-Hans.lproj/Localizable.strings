@@ -16,7 +16,7 @@
 "%lld items" = "%lld 项";
 "1 item" = "1 项";
 "Name" = "名称";
-"Date Modified" = "修改日期";
+"Date" = "日期";
 "Size" = "大小";
 "Kind" = "种类";
 "Folder" = "文件夹";

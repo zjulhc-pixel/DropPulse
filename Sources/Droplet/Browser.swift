@@ -162,7 +162,7 @@ private struct GridBrowser: View {
     }
 
     private func days(_ files: [PhoneItem]) -> [(day: Date, items: [PhoneItem])] {
-        Dictionary(grouping: files) { Calendar.current.startOfDay(for: $0.date) }
+        Dictionary(grouping: files) { Calendar.current.startOfDay(for: $0.shown) }
             .map { ($0.key, $0.value) }
             .sorted { $0.day > $1.day }
     }
@@ -325,8 +325,8 @@ private struct ListBrowser: View {
                     Text(item.name).lineLimit(1)
                 }
             }
-            TableColumn("Date Modified", value: \.date) { item in
-                Text(item.date, format: .dateTime.year().month().day().hour().minute())
+            TableColumn("Date", value: \.shown) { item in
+                Text(item.shown, format: .dateTime.year().month().day().hour().minute())
                     .foregroundStyle(.secondary)
             }
             .width(min: 130, ideal: 170)

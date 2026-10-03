@@ -1,4 +1,5 @@
 import AppKit
+import ImageIO
 import IOKit
 import SwiftUI
 
@@ -88,8 +89,11 @@ enum Prefs {
     var replacePrompt: (count: Int, answer: CheckedContinuation<Bool?, Never>)?
 
     let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appending(path: "Droplet")
+    private var takenCache: [String: Double] = [:]
+    private var dating = Set<String>()
 
     private init() {
+        takenCache = (try? JSONDecoder().decode([String: Double].self, from: Data(contentsOf: takenFile))) ?? [:]
         Task { await monitor() }
         NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { _ in
             MainActor.assumeIsolated { Store.shared.device?.closeNow() }
@@ -216,16 +220,77 @@ enum Prefs {
         if listings[target] == nil, target == path { loading = true }
         defer { if target == path { loading = false } }
         do {
-            let items = try await device.list(target, hidden: Prefs.showHidden)
-            let sorted = items.sorted { a, b in
-                a.isFolder != b.isFolder ? a.isFolder : a.isFolder ? a.name.localizedStandardCompare(b.name) == .orderedAscending : a.date > b.date
-            }
+            let sorted = arrange(try await device.list(target, hidden: Prefs.showHidden))
             if listings[target] != sorted {
                 withAnimation(listings[target] == nil ? nil : .snappy) { listings[target] = sorted }
             }
+            if sorted.contains(where: { $0.kind == .image && $0.taken == nil }) { Task { await findTakenDates(target) } }
         } catch {
             if target == path { alert = error.localizedDescription }
         }
+    }
+
+    /// Folders by name, then files newest first by when they were taken.
+    private func arrange(_ items: [PhoneItem]) -> [PhoneItem] {
+        items.map { item in
+            var item = item
+            item.taken = Self.nameDate(item.name) ?? takenCache[Self.dateKey(item)].map(Date.init(timeIntervalSince1970:))
+            return item
+        }
+        .sorted { a, b in
+            a.isFolder != b.isFolder ? a.isFolder : a.isFolder ? a.name.localizedStandardCompare(b.name) == .orderedAscending : a.shown > b.shown
+        }
+    }
+
+    // MARK: Capture dates
+
+    /// Imported photos (from a camera app, say) are modified when they reach the phone, so
+    /// grouping by that date is wrong. Camera file names carry the time they were taken;
+    /// otherwise it comes from the Exif block at the start of the file, read in the background
+    /// and cached on the Mac.
+    private func findTakenDates(_ path: String) async {
+        guard let device, !dating.contains(path) else { return }
+        dating.insert(path)
+        defer { dating.remove(path) }
+        let pending = (listings[path] ?? []).filter { $0.kind == .image && $0.taken == nil }
+        for (index, item) in pending.enumerated() {
+            guard let head = try? await device.read(item, length: 64 << 10) else { continue }
+            takenCache[Self.dateKey(item)] = (Self.exifDate(head, size: item.size) ?? item.date).timeIntervalSince1970
+            if index % 40 == 39 || index == pending.count - 1, let items = listings[path] {
+                withAnimation(.snappy) { listings[path] = arrange(items) }
+            }
+        }
+        try? JSONEncoder().encode(takenCache).write(to: takenFile)
+    }
+
+    private var takenFile: URL { cacheDir.appending(path: "taken.json") }
+
+    private static func dateKey(_ item: PhoneItem) -> String { "\(item.path)|\(item.size)|\(item.date.timeIntervalSince1970)" }
+
+    /// "IMG20260607175302", "IMG_20260502_162437", "Screenshot_2026-09-30-14-22-10".
+    nonisolated static func nameDate(_ name: String) -> Date? {
+        guard let match = name.firstMatch(of: /(20\d\d)[-_]?(\d\d)[-_]?(\d\d)[-_ T]?(\d\d)[-_.]?(\d\d)[-_.]?(\d\d)/),
+              let month = Int(match.2), (1...12).contains(month), let day = Int(match.3), (1...31).contains(day),
+              let hour = Int(match.4), hour < 24, let minute = Int(match.5), minute < 60, let second = Int(match.6), second < 60
+        else { return nil }
+        return Calendar.current.date(from: DateComponents(year: Int(match.1), month: month, day: day, hour: hour, minute: minute, second: second))
+    }
+
+    /// Exif DateTimeOriginal, with its time zone offset when the camera recorded one. ImageIO
+    /// only needs the header, so the rest of the file stands in as zeros.
+    nonisolated static func exifDate(_ head: Data, size: Int64) -> Date? {
+        var sparse = Data(count: Int(max(size, Int64(head.count))))
+        sparse.replaceSubrange(0..<head.count, with: head)
+        guard let properties = CGImageSourceCreateWithData(sparse as CFData, nil)
+                .flatMap({ CGImageSourceCopyPropertiesAtIndex($0, 0, nil) }) as? [CFString: Any],
+              let exif = properties[kCGImagePropertyExifDictionary] as? [CFString: Any],
+              let text = exif[kCGImagePropertyExifDateTimeOriginal] as? String
+        else { return nil }
+        let offset = exif[kCGImagePropertyExifOffsetTimeOriginal] as? String
+        let format = DateFormatter()
+        format.locale = Locale(identifier: "en_US_POSIX")
+        format.dateFormat = offset == nil ? "yyyy:MM:dd HH:mm:ss" : "yyyy:MM:dd HH:mm:ssxxx"
+        return format.date(from: text + (offset ?? ""))
     }
 
     func activate(_ item: PhoneItem) {

@@ -12,9 +12,11 @@ struct PhoneItem: Codable, Hashable, Identifiable, Sendable {
     let name: String
     let isFolder: Bool
     let size: Int64
-    let date: Date
+    let date: Date                  // last modified on the phone: for imports, when it arrived
+    var taken: Date?                // when the photo was taken, once known
 
     var id: String { path }
+    var shown: Date { taken ?? date }
     var ext: String { (name as NSString).pathExtension.lowercased() }
     var kind: Kind {
         if isFolder { return .folder }
