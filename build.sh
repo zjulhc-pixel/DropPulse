@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds build/Droplet.app. Works with just the Command Line Tools.
+# Builds build/DropPulse.app. Works with just the Command Line Tools.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -11,10 +11,10 @@ fi
 
 swift build -c release
 
-APP=build/Droplet.app
+APP=build/DropPulse.app
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp .build/release/Droplet "$APP/Contents/MacOS/"
+cp .build/release/DropPulse "$APP/Contents/MacOS/"
 cp Resources/Info.plist "$APP/Contents/"
 cp -R Resources/*.lproj "$APP/Contents/Resources/"
 [[ -f Resources/AppIcon.icns ]] || swift scripts/make-icon.swift Resources

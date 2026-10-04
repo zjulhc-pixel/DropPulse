@@ -31,7 +31,7 @@ struct MTPError: LocalizedError {
     init(_ message: String) { errorDescription = message }
 }
 
-/// A small MTP initiator on top of IOUSBHost — just what Droplet needs from an Android phone.
+/// A small MTP initiator on top of IOUSBHost — just what DropPulse needs from an Android phone.
 /// The actor runs on its own serial queue, so blocking USB I/O never stalls Swift's thread pool.
 /// Large reads are split into chunks with a yield between them, so browsing and thumbnails
 /// keep flowing while a transfer runs.
@@ -39,7 +39,7 @@ actor MTP {
     nonisolated let name: String
     nonisolated let serial: String
 
-    private let queue = DispatchSerialQueue(label: "droplet.mtp")
+    private let queue = DispatchSerialQueue(label: "droppulse.mtp")
     nonisolated var unownedExecutor: UnownedSerialExecutor { queue.asUnownedSerialExecutor() }
 
     private let interface: IOUSBHostInterface

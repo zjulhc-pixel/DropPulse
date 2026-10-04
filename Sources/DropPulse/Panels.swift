@@ -222,7 +222,7 @@ struct MenuPanel: View {
             }
 
             HStack {
-                Button("Open Droplet") {
+                Button("Open DropPulse") {
                     openWindow(id: "main")
                     NSApp.activate()
                 }

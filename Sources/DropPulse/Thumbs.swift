@@ -191,7 +191,7 @@ final class PhoneAsset: AVURLAsset, @unchecked Sendable {
 
     init(_ item: PhoneItem, _ mtp: MTP) {
         loader = Loader(item: item, mtp: mtp)
-        super.init(url: URL(string: "droplet://\(item.handle)/video.\(item.ext)")!, options: nil)
+        super.init(url: URL(string: "droppulse://\(item.handle)/video.\(item.ext)")!, options: nil)
         resourceLoader.setDelegate(loader, queue: .global(qos: .userInitiated))
     }
 

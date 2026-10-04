@@ -7,7 +7,7 @@ enum ViewMode: String { case icons, list }
 
 /// User preferences, shared with `@AppStorage` in SettingsView.
 enum Prefs {
-    static var importFolder: URL { folder("importFolder", .picturesDirectory, "Droplet") }
+    static var importFolder: URL { folder("importFolder", .picturesDirectory, "DropPulse") }
     static var copyFolder: URL { folder("copyFolder", .downloadsDirectory, nil) }
     static var showHidden: Bool { UserDefaults.standard.bool(forKey: "showHidden") }
     static var revealAfterCopy: Bool { UserDefaults.standard.object(forKey: "revealAfterCopy") as? Bool ?? true }
@@ -89,7 +89,7 @@ enum Prefs {
     var creatingFolder = false
     var replacePrompt: (count: Int, answer: CheckedContinuation<Bool?, Never>)?
 
-    let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appending(path: "Droplet")
+    let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appending(path: "DropPulse")
     private var takenCache: [String: Double] = [:]       // capture time, or emptyMark
     private(set) var emptyFiles = Set<String>()          // all zeros on the phone (unfinished copies): hidden
     private static let emptyMark = -1.0
@@ -124,7 +124,7 @@ enum Prefs {
                     let serial = MTP.serial(of: service)
                     // macOS's image capture daemon grabs phones as they're plugged in. It restarts on
                     // demand, so it is safe to stop; any other app is left alone and named instead.
-                    if let owner = MTP.owner(of: service), owner.name != "Droplet" {
+                    if let owner = MTP.owner(of: service), owner.name != "DropPulse" {
                         if owner.name == "ptpcamerad" {
                             kill(owner.pid, SIGKILL)
                             try? await Task.sleep(for: .milliseconds(200))
@@ -396,7 +396,7 @@ enum Prefs {
             transfer.total = files.reduce(0) { $0 + $1.item.size }
             // Copy into a staging folder on the same volume, then move with Finder-style
             // unique names, so nothing on the Mac is ever overwritten or left half-written.
-            let stage = folder.appending(path: ".droplet-\(UUID().uuidString)")
+            let stage = folder.appending(path: ".droppulse-\(UUID().uuidString)")
             defer { try? FileManager.default.removeItem(at: stage) }
             for (item, relative) in files {
                 let target = stage.appending(path: relative)

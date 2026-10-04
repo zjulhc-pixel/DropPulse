@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleName</key>
-	<string>Droplet</string>
+	<string>DropPulse</string>
 	<key>CFBundleDisplayName</key>
-	<string>Droplet</string>
+	<string>DropPulse</string>
 	<key>CFBundleIdentifier</key>
-	<string>app.droplet.mac</string>
+	<string>io.github.zjulhc-pixel.droppulse</string>
 	<key>CFBundleExecutable</key>
-	<string>Droplet</string>
+	<string>DropPulse</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -39,7 +39,7 @@
 	<array>
 		<dict>
 			<key>UTTypeIdentifier</key>
-			<string>app.droplet.phone-item</string>
+			<string>io.github.zjulhc-pixel.droppulse.phone-item</string>
 			<key>UTTypeDescription</key>
 			<string>Phone Item</string>
 			<key>UTTypeConformsTo</key>

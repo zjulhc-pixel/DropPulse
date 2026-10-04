@@ -2,17 +2,17 @@ import ServiceManagement
 import SwiftUI
 
 @main
-struct DropletApp: App {
+struct DropPulseApp: App {
     @NSApplicationDelegateAdaptor private var delegate: AppDelegate
     private let store = Store.shared
 
     var body: some Scene {
-        Window("Droplet", id: "main") {
+        Window("DropPulse", id: "main") {
             RootView()
         }
         .defaultSize(width: 1120, height: 740)
         .defaultLaunchBehavior(.suppressed)          // MenuBarIcon decides: not when started at login
-        .commands { DropletCommands(store: store) }
+        .commands { DropPulseCommands(store: store) }
 
         MenuBarExtra {
             MenuPanel()
@@ -27,7 +27,7 @@ struct DropletApp: App {
     }
 }
 
-/// Droplet starts at login and waits in the menu bar, so plugging in a phone opens it.
+/// DropPulse starts at login and waits in the menu bar, so plugging in a phone opens it.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor static var launch: (done: Bool, atLogin: Bool) = (false, false)
 
@@ -77,7 +77,7 @@ private struct MenuBarIcon: View {
     }
 }
 
-private struct DropletCommands: Commands {
+private struct DropPulseCommands: Commands {
     let store: Store
     @AppStorage("sidebarMode") private var sidebarMode = SidebarMode.full
 
@@ -154,8 +154,8 @@ struct SettingsView: View {
             }
             Section {
                 Toggle(isOn: $openOnConnect) {
-                    Text("Open Droplet when a phone connects")
-                    Text("Droplet waits in the menu bar after you log in.")
+                    Text("Open DropPulse when a phone connects")
+                    Text("DropPulse waits in the menu bar after you log in.")
                 }
                 .onChange(of: openOnConnect) { AppDelegate.updateLoginItem() }
                 Toggle("Show hidden files", isOn: $showHidden)

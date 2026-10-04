@@ -2,7 +2,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "Droplet",
+    name: "DropPulse",
     platforms: [.macOS(.v26)],
-    targets: [.executableTarget(name: "Droplet")]
+    targets: [.executableTarget(name: "DropPulse")]
 )

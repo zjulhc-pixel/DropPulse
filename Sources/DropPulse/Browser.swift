@@ -459,7 +459,7 @@ private struct VideoSheet: View {
 // MARK: - Drag and drop
 
 extension UTType {
-    static let phoneItem = UTType(exportedAs: "app.droplet.phone-item")
+    static let phoneItem = UTType(exportedAs: "io.github.zjulhc-pixel.droppulse.phone-item")
 }
 
 extension PhoneItem: Transferable {

@@ -1,58 +1,67 @@
-# Droplet
+# DropPulse
 
-[English](README.md) · 中文
+[English](README.md) · 简体中文
 
-在 Mac 和 Android 手机之间传文件的原生 macOS App。界面用 SwiftUI 和 Liquid Glass 实现，MTP 通信是基于系统 IOUSBHost 框架自己写的，不依赖任何第三方库。项目最初基于 [OpenMTP](https://github.com/ganeshrvel/openmtp)。
+**Android 与 Mac 之间，一瞬即达。** DropPulse 是一款原生 macOS 应用，通过 USB 在 Android 手机和 Mac 之间传送照片、视频和文件。插上手机，照片立刻出现，拖出来就完成了。
+
+界面用 SwiftUI 和 Liquid Glass 构建；MTP 通信直接基于 Apple 的 IOUSBHost 框架实现：不依赖第三方库，不需要内核扩展，手机端也不用安装任何东西。
+
+![DropPulse](docs/hero.jpg)
+
+## 快
+
+- **文件夹秒开**：一次 MTP 请求（`GetObjectPropList`）读完整个文件夹，相机里 1,956 个项目只需 0.4 秒。
+- **缩略图毫秒级**：每张照片只读取开头 128 KB，取出相机写在 Exif 里的 JPEG 小图，每张约 2 毫秒。哈苏等相机拍的 HEIC 会改用文件内的 HEIF 预览图；JPEG 会退而使用 MTP `GetThumb`；视频只读取索引和第一帧。
+- **最高 160 MB/s**：传输分块进行，随时可以停止，传输期间照常浏览。
+- **视频边读边播**：不用先拷贝到 Mac。
+
+## 省心
+
+- **插上就打开**：登录后在菜单栏待命，手机一连上就自动打开窗口。macOS 自带的 `ptpcamerad` 会抢占 MTP 设备，DropPulse 会自动把手机接管回来。
+- **拷贝不覆盖**：绝不覆盖 Mac 上已有的文件。名称和大小都相同的直接跳过，其余按访达的方式自动改名（`IMG 2.jpg`）。
+- **按拍摄日期分组**：拍摄时间优先从相机文件名读取；文件名里没有时间的，在后台读取 Exif 里的 `DateTimeOriginal` 并缓存。
+- **一键导入新照片**：工具栏、菜单栏面板或快捷键 ⇧⌘I 都可以触发。
+- **Liquid Glass 边栏**：可以收成一座悬浮的玻璃浮岛，切换文件夹时，选中透镜会先拉伸、再回弹到位。
+
+## 系统要求
+
+- Apple 芯片，macOS 26 或更高版本
+- 已解锁、USB 模式设为"文件传输"的 Android 手机
 
 ## 构建
 
-只装 Command Line Tools 就能构建，不需要 Xcode。系统要求 macOS 26 及以上，Apple 芯片。
+只需要命令行工具（Command Line Tools），不需要 Xcode：
 
 ```bash
 ./build.sh
-open build/Droplet.app
+open build/DropPulse.app
 ```
 
-## 功能
+把 `build/DropPulse.app` 拷贝到"应用程序"文件夹后，它才会注册为登录项，开机自动在菜单栏待命。
 
-- **连接**：Droplet 登录后在菜单栏待命，插上手机就自动打开窗口，拔掉后自动断开。手机锁屏时会提示先解锁，解锁后自动继续。这个行为可以在设置里关闭。
-- **边栏**：有三种状态：完整、仅图标（浮动的玻璃竖条，⌥⌘S 切换）、全部收起（⌃⌘S）。
-- **浏览**：
-  - 相机这类以照片、视频为主的文件夹，用照片网格显示，并按**拍摄日期**分组。拍摄时间优先从文件名读取（如 `IMG20260607175302`）；文件名里没有时间的（如哈苏 `B0004665_91`），后台读 Exif 里的拍摄时间，并缓存在 Mac 上。
-  - 其他文件夹用图标显示，也可以切换成可排序的列表。
-  - 读过的文件夹会缓存下来，再次打开时立即显示，后台再刷新。
-- **缩略图**：
-  - 照片：只读取文件开头 128 KB，取出相机写在 Exif 里的小图，每张约 2 毫秒。如果没有 Exif 小图，HEIC 会改读文件内单独存的预览图（哈苏等相机会带），JPG 会直接向手机要缩略图。这些都没有时才解码原图。
-  - 视频：只读取索引和第一帧。
-  - 生成过的缩略图存在磁盘上，下次直接用。
-- **手机 → Mac**：
-  - 支持选择栏、右键菜单，或直接拖到 Finder。
-  - 不会覆盖 Mac 上已有的文件：同名且大小相同的直接跳过；同名但内容不同的会自动改名，比如 `IMG 2.jpg`。
-- **Mac → 手机**：把文件拖进窗口，或拖到边栏里的 Android 文件夹即可发送。遇到同名文件时可以选择替换或跳过。
-- **导入新照片**：第一次连接时记下当时的时间，之后新拍的照片和视频可以一键导入到“图片/Droplet”。工具栏、菜单栏面板和快捷键 ⇧⌘I 都能触发。
-- **视频**：边读边播，不用先拷贝到 Mac。
-- **其他**：
-  - 按空格键快速查看文件。
-  - 传输可以随时停止，传输期间也能继续浏览。
-  - 可以在手机上新建文件夹、重命名和删除。
-  - 菜单栏面板可以查看设备状态、导入新照片、查看最近的传输记录。
-
-## 代码结构
+## 实现方式
 
 | 文件 | 作用 |
 | --- | --- |
-| `MTP.swift` | 基于 IOUSBHost 的精简 MTP 实现：批量读取目录、按范围读取文件、分块传输、上传、重命名、删除。 |
-| `Store.swift` | 应用状态：连接、浏览、传输队列、文件操作。 |
-| `Thumbs.swift` | 生成照片缩略图（Exif 内嵌小图）和视频首帧，以及边读边播用的视频数据源。 |
-| `Browser.swift` | 网格视图、列表视图、浮动选择栏、拖放。 |
-| `Sidebar.swift` | 窗口根视图、边栏、对话框。 |
-| `Panels.swift` | 首次连接页、传输进度、菜单栏面板。 |
-| `DropletApp.swift` | 场景、菜单命令、设置。 |
+| `MTP.swift` | 基于 IOUSBHost 的精简 MTP 实现：会话恢复、读取文件夹、按范围读取、分块下载、流式上传、重命名和删除。它运行在独立的串行队列上，阻塞的 USB 读写不会卡住 Swift 的线程池。 |
+| `Thumbs.swift` | 从 Exif、HEIF 预览图和 `GetThumb` 生成缩略图，生成视频首帧，以及基于按范围读取的视频流式播放。 |
+| `Store.swift` | 应用状态：连接、浏览、拍摄日期、传输队列和文件操作。 |
+| `Browser.swift` | 照片网格与列表、悬浮选择栏、拖放、视频播放器。 |
+| `Sidebar.swift` | 窗口根视图、边栏及玻璃浮岛、对话框。 |
+| `Panels.swift` | 连接引导页、传输进度、菜单栏面板。 |
+| `DropPulseApp.swift` | 场景、菜单命令、设置和登录项。 |
 
-## 图标
+应用图标和菜单栏图标都由 `scripts/make-icon.swift` 以矢量方式绘制。
 
-App 图标和菜单栏图标都由 `scripts/make-icon.swift` 用矢量绘制，生成 `Resources/AppIcon.icns` 和 `Resources/MenuBarTemplate.pdf`。修改设计后，删掉 `AppIcon.icns` 再运行 `./build.sh`，就会全部重新生成。
+## 说明
+
+- 测试机型为 OPPO Find X9 Ultra（ColorOS）。其他 Android 手机使用相同的 MTP 协议，欢迎反馈使用情况。
+- 同一时间只能有一个应用通过 MTP 使用手机。DropPulse 连接期间，请退出 Android File Transfer 或 OpenMTP。
 
 ## 致谢
 
-界面和交互最初参考了 OpenMTP（© Ganesh Rathinavel，MIT 许可），现在的代码已经不包含 OpenMTP 的任何部分。
+灵感来自 Ganesh Rathinavel 的 [OpenMTP](https://github.com/ganeshrvel/openmtp)。最初的原型使用过它的 Kalam 内核，现在的代码已不包含其任何部分。设计参考：Dribbble 上 Andrii Vynarchyk 的"Liquid glass"，以及 Webflow 上 Rishabh Rai 的"Glass Button UI"。
+
+## 许可证
+
+[MIT](LICENSE)
