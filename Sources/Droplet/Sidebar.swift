@@ -10,7 +10,7 @@ enum SidebarMode: String {
 }
 
 struct RootView: View {
-    static let motion = Animation.smooth(duration: 0.35)
+    static let motion = Animation.spring(duration: 0.45, bounce: 0.22)
     @Bindable private var store = Store.shared
     @AppStorage("sidebarMode") private var mode = SidebarMode.full
     @State private var columns = UserDefaults.standard.string(forKey: "sidebarMode") ?? "full" == "full"
@@ -36,7 +36,11 @@ struct RootView: View {
                     IconRail()
                         .padding(.leading, 8)
                         .padding(.top, 8)
-                        .transition(.move(edge: .leading).combined(with: .opacity))
+                        // Grows out of the corner where the sidebar button sits, like a glass
+                        // button opening into a panel.
+                        .transition(.asymmetric(
+                            insertion: .scale(scale: 0.2, anchor: .topLeading).combined(with: .opacity),
+                            removal: .scale(scale: 0.6, anchor: .topLeading).combined(with: .opacity)))
                 }
             }
             .toolbar {
@@ -117,38 +121,102 @@ struct Sidebar: View {
     }
 }
 
-/// The sidebar folded down to its icons: a floating glass column beside the content.
+/// The sidebar folded down to its icons: a floating glass island beside the content. The
+/// current folder sits under a glass lens that stretches across to a new pick, then springs
+/// into place.
 private struct IconRail: View {
-    static let width: CGFloat = 8 + 52 + 10          // inset, capsule, gap before the content
+    static let width: CGFloat = 8 + 56 + 10           // inset, island, gap before the content
+    private static let cell: CGFloat = 44, gap: CGFloat = 4, inset: CGFloat = 6
+
     private var store = Store.shared
+    @State private var lens: ClosedRange<Int>?        // rows the lens covers; both ends while moving
+    @State private var hovered: String?
+    @State private var hoveringIsland = false
 
     var body: some View {
-        VStack(spacing: 4) {
-            ForEach(store.visibleFavorites, id: \.self) { path in
+        let favorites = store.visibleFavorites
+        let current = favorites.firstIndex(of: store.path)
+        VStack(spacing: Self.gap) {
+            ForEach(favorites, id: \.self) { path in
                 let title = folderTitle(path, device: nil)
-                let current = store.path == path
+                let selected = store.path == path
                 Button(title, systemImage: folderSymbol(path)) { store.open(path) }
                     .labelStyle(.iconOnly)
-                    .font(.system(size: 17))
-                    .foregroundStyle(current ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
-                    .frame(width: 40, height: 40)
-                    .background {
-                        if current { Circle().fill(.tint.opacity(0.16)) }
-                    }
-                    .contentShape(.circle)
+                    .font(.system(size: 17, weight: selected ? .semibold : .regular))
+                    .scaleEffect(selected ? 1.12 : hovered == path ? 1.06 : 1)     // the lens magnifies
+                    .frame(width: Self.cell, height: Self.cell)
+                    .contentShape(.capsule)
                     .overlay(alignment: .topTrailing) {
                         if path == Store.cameraPath && !store.newItems.isEmpty {
-                            Circle().fill(.tint).frame(width: 7, height: 7).offset(x: -5, y: 5)
+                            Circle().fill(.tint).frame(width: 7, height: 7).offset(x: -6, y: 6)
                         }
                     }
+                    .onHover { hovered = $0 ? path : (hovered == path ? nil : hovered) }
                     .help(title)
                     .dropDestination(for: URL.self) { urls, _ in store.sendToPhone(urls, to: path); return true }
             }
         }
         .buttonStyle(.plain)
-        .animation(.smooth(duration: 0.2), value: store.path)
-        .padding(6)
-        .glassEffect(.regular.interactive(), in: .capsule)
+        .animation(.spring(duration: 0.4, bounce: 0.35), value: store.path)
+        .animation(.timingCurve(0.25, 1, 0.5, 1, duration: 0.4), value: hovered)
+        .padding(Self.inset)
+        .background(alignment: .top) {
+            if let lens {
+                Color.clear
+                    .frame(width: Self.cell, height: CGFloat(lens.count) * Self.cell + CGFloat(lens.count - 1) * Self.gap)
+                    .glassEffect(.regular.interactive(), in: .capsule)
+                    .offset(y: Self.inset + CGFloat(lens.lowerBound) * (Self.cell + Self.gap))
+            }
+        }
+        .background { GlassIsland(lifted: hoveringIsland) }
+        .onHover { hoveringIsland = $0 }
+        .onAppear { lens = current.map { $0...$0 } }
+        .onChange(of: current) { old, new in
+            guard let new else { withAnimation(.smooth(duration: 0.25)) { lens = nil }; return }
+            guard let old, old != new, lens != nil else {
+                withAnimation(.spring(duration: 0.4, bounce: 0.3)) { lens = new...new }
+                return
+            }
+            // Stretch over both rows, then let go of the old one with a bounce.
+            withAnimation(.easeIn(duration: 0.13)) { lens = min(old, new)...max(old, new) }
+            Task {
+                try? await Task.sleep(for: .milliseconds(130))
+                withAnimation(.spring(duration: 0.45, bounce: 0.35)) { lens = new...new }
+            }
+        }
+    }
+}
+
+/// A capsule of thick glass: a faint diagonal sheen, a darker top and brighter bottom inside
+/// the edge, a specular rim that turns as the pointer arrives, and a soft shadow below.
+private struct GlassIsland: View {
+    var lifted: Bool
+
+    var body: some View {
+        Capsule()
+            .fill(.ultraThinMaterial)
+            .overlay {
+                Capsule().fill(LinearGradient(colors: [.white.opacity(0.05), .white.opacity(lifted ? 0.24 : 0.18), .white.opacity(0.05)],
+                                              startPoint: lifted ? .top : .topLeading, endPoint: lifted ? .bottom : .bottomTrailing))
+            }
+            .overlay {
+                // Inner shading: dark along the top, light along the bottom.
+                Capsule().strokeBorder(.black.opacity(0.07), lineWidth: 3).blur(radius: 2).offset(y: 1.5).mask(Capsule())
+                Capsule().strokeBorder(.white.opacity(0.5), lineWidth: 3).blur(radius: 2).offset(y: -1.5).mask(Capsule())
+            }
+            .overlay {
+                Capsule().strokeBorder(
+                    AngularGradient(stops: [.init(color: .white.opacity(0.95), location: 0), .init(color: .white.opacity(0.15), location: 0.18),
+                                            .init(color: .white.opacity(0.15), location: 0.32), .init(color: .white.opacity(0.8), location: 0.5),
+                                            .init(color: .white.opacity(0.15), location: 0.68), .init(color: .white.opacity(0.15), location: 0.82),
+                                            .init(color: .white.opacity(0.95), location: 1)],
+                                    center: .center, angle: .degrees(lifted ? -125 : -75)),
+                    lineWidth: 1)
+            }
+            .shadow(color: .black.opacity(0.08), radius: 1, y: 1)
+            .shadow(color: .black.opacity(lifted ? 0.16 : 0.2), radius: lifted ? 6 : 9, y: lifted ? 4 : 7)
+            .scaleEffect(lifted ? 0.985 : 1)
+            .animation(.timingCurve(0.25, 1, 0.5, 1, duration: 0.4), value: lifted)
     }
 }
 
