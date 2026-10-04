@@ -27,6 +27,28 @@ https://github.com/user-attachments/assets/cf563d50-0b74-49dc-990c-9a6251aa84d7
 - **Import new photos in one click** from the toolbar, the menu bar panel, or ⇧⌘I.
 - **A Liquid Glass sidebar.** It folds into a floating glass island whose selection lens stretches and springs between folders.
 
+## A closer look
+
+**Browse by the day photos were taken.** The sidebar shows the phone, its free space and your folders.
+
+![Browsing the camera folder](docs/screens/en/browse.jpg)
+
+**Fold the sidebar into a glass island.** One button cycles between the full sidebar, icons only and hidden.
+
+![The sidebar as a glass island](docs/screens/en/island.jpg)
+
+**Keep browsing while files copy.** Pick photos, copy them, and follow every transfer from the toolbar.
+
+![Copying photos while browsing](docs/screens/en/transfer.jpg)
+
+**One click away in the menu bar.** See what is new since your last import, import it in one click, and check recent transfers.
+
+![The menu bar panel](docs/screens/en/menubar.jpg)
+
+**A short guide while no phone is connected.** DropPulse picks the phone up the moment it appears.
+
+![Waiting for a phone](docs/screens/en/connect.jpg)
+
 ## Requirements
 
 - macOS 26 or later on Apple silicon

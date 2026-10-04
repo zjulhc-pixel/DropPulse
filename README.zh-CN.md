@@ -27,6 +27,28 @@ https://github.com/user-attachments/assets/82748ee1-8aa9-4e15-bb22-702e56645a01
 - **一键导入新照片**：工具栏、菜单栏面板或快捷键 ⇧⌘I 都可以触发。
 - **Liquid Glass 边栏**：可以收成一座悬浮的玻璃浮岛，切换文件夹时，选中透镜会先拉伸、再回弹到位。
 
+## 界面一览
+
+**按拍摄日期浏览。** 边栏显示手机型号、剩余空间和常用文件夹。
+
+![浏览相机文件夹](docs/screens/zh/browse.jpg)
+
+**边栏收成玻璃浮岛。** 同一个按钮在完整边栏、仅图标和隐藏之间切换。
+
+![玻璃浮岛边栏](docs/screens/zh/island.jpg)
+
+**拷贝时照常浏览。** 选中照片一键拷贝，工具栏里随时查看每一项传输。
+
+![边浏览边拷贝](docs/screens/zh/transfer.jpg)
+
+**菜单栏一点即达。** 查看上次导入后的新照片，一键导入，顺便看看最近的传输。
+
+![菜单栏面板](docs/screens/zh/menubar.jpg)
+
+**没连手机时，有简短的连接引导。** 手机一接上，DropPulse 立刻识别。
+
+![等待连接手机](docs/screens/zh/connect.jpg)
+
 ## 系统要求
 
 - Apple 芯片，macOS 26 或更高版本
