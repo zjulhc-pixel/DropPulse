@@ -8,9 +8,9 @@
 
 ![DropPulse](docs/hero.jpg)
 
-15 秒演示视频：
+演示视频：
 
-https://github.com/user-attachments/assets/82748ee1-8aa9-4e15-bb22-702e56645a01
+https://github.com/user-attachments/assets/c47f5e95-2502-4f1f-8a7d-bdd13eb10940
 
 ## 快
 

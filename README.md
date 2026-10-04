@@ -8,9 +8,9 @@ It is built with SwiftUI and Liquid Glass, on a small MTP implementation written
 
 ![DropPulse](docs/hero.jpg)
 
-A 15-second look at it in motion:
+A short look at it in motion:
 
-https://github.com/user-attachments/assets/cf563d50-0b74-49dc-990c-9a6251aa84d7
+https://github.com/user-attachments/assets/a1d7efc4-90fa-41ac-95b4-419197af3e58
 
 ## Fast
 
