@@ -6,7 +6,7 @@ English · [简体中文](README.zh-CN.md)
 
 It is built with SwiftUI and Liquid Glass, on a small MTP implementation written directly against Apple's IOUSBHost framework: no third-party libraries, no kernel extensions, nothing to install on the phone.
 
-![DropPulse](docs/hero.jpg)
+https://github.com/user-attachments/assets/cf563d50-0b74-49dc-990c-9a6251aa84d7
 
 ## Fast
 
