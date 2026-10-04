@@ -6,7 +6,7 @@
 
 界面用 SwiftUI 和 Liquid Glass 构建；MTP 通信直接基于 Apple 的 IOUSBHost 框架实现：不依赖第三方库，不需要内核扩展，手机端也不用安装任何东西。
 
-![DropPulse](docs/hero.jpg)
+https://github.com/user-attachments/assets/82748ee1-8aa9-4e15-bb22-702e56645a01
 
 ## 快
 
