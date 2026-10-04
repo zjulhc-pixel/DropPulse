@@ -1,56 +1,64 @@
 # Droplet
 
-在 Mac 和 Android 手机之间传文件的原生 macOS App。界面用 SwiftUI 和 Liquid Glass 实现，MTP 通信是基于系统 IOUSBHost 框架自己写的，不依赖任何第三方库。项目最初基于 [OpenMTP](https://github.com/ganeshrvel/openmtp)。
+English · [中文](README.zh-CN.md)
 
-## 构建
+A native macOS app for moving photos, videos and files between an Android phone and a Mac over USB. Built with SwiftUI and Liquid Glass, with a small MTP implementation written directly on Apple's IOUSBHost framework — no third-party libraries, no kernel extensions, nothing to install on the phone.
 
-只装 Command Line Tools 就能构建，不需要 Xcode。系统要求 macOS 26 及以上，Apple 芯片。
+![Droplet](docs/hero.jpg)
+
+## Why
+
+Android File Transfer is gone and the alternatives feel dated. Droplet aims to feel like a first-party Mac app: plug the phone in, see your photos instantly, drag them out.
+
+## Highlights
+
+- **Fast browsing** — a whole folder is read in one MTP request (`GetObjectPropList`): 1,956 camera items in 0.4 s.
+- **Instant thumbnails** — reads only the first 128 KB of each photo to pull the JPEG thumbnail the camera embeds in its Exif block (~2 ms each). HEIC files from cameras like Hasselblad use their HEIF preview item; JPEGs fall back to MTP `GetThumb`; videos read just their index and first frame.
+- **Stream videos** — play phone videos while they stream over USB; nothing is copied first.
+- **Safe copies** — never overwrites anything on the Mac: identical files are skipped, others get Finder-style names (`IMG 2.jpg`). Transfers are chunked, cancellable, and browsing keeps working while they run.
+- **Grouped by capture date** — from camera file names, or Exif `DateTimeOriginal` read in the background and cached.
+- **Liquid Glass UI** — a floating glass sidebar island whose selection lens stretches and springs between folders; a menu bar panel for new photos and recent transfers.
+- **Opens when you plug in** — waits in the menu bar after login and opens its window when a phone connects. It also takes the phone back from macOS's `ptpcamerad`, which otherwise grabs MTP devices.
+
+## Requirements
+
+- macOS 26 or later, Apple silicon
+- An Android phone set to **File transfer** mode, unlocked
+
+## Build
+
+Only the Command Line Tools are needed — no Xcode:
 
 ```bash
 ./build.sh
 open build/Droplet.app
 ```
 
-## 功能
+Copy `build/Droplet.app` to `/Applications` to have it start at login (it only registers itself as a login item from there).
 
-- **连接**：Droplet 登录后在菜单栏待命，插上手机就自动打开窗口，拔掉后自动断开。手机锁屏时会提示先解锁，解锁后自动继续。这个行为可以在设置里关闭。
-- **边栏**：有三种状态：完整、仅图标（浮动的玻璃竖条，⌥⌘S 切换）、全部收起（⌃⌘S）。
-- **浏览**：
-  - 相机这类以照片、视频为主的文件夹，用照片网格显示，并按**拍摄日期**分组。拍摄时间优先从文件名读取（如 `IMG20260607175302`）；文件名里没有时间的（如哈苏 `B0004665_91`），后台读 Exif 里的拍摄时间，并缓存在 Mac 上。
-  - 其他文件夹用图标显示，也可以切换成可排序的列表。
-  - 读过的文件夹会缓存下来，再次打开时立即显示，后台再刷新。
-- **缩略图**：
-  - 照片：只读取文件开头 128 KB，取出相机写在 Exif 里的小图，每张约 2 毫秒。如果没有 Exif 小图，HEIC 会改读文件内单独存的预览图（哈苏等相机会带），JPG 会直接向手机要缩略图。这些都没有时才解码原图。
-  - 视频：只读取索引和第一帧。
-  - 生成过的缩略图存在磁盘上，下次直接用。
-- **手机 → Mac**：
-  - 支持选择栏、右键菜单，或直接拖到 Finder。
-  - 不会覆盖 Mac 上已有的文件：同名且大小相同的直接跳过；同名但内容不同的会自动改名，比如 `IMG 2.jpg`。
-- **Mac → 手机**：把文件拖进窗口，或拖到边栏里的 Android 文件夹即可发送。遇到同名文件时可以选择替换或跳过。
-- **导入新照片**：第一次连接时记下当时的时间，之后新拍的照片和视频可以一键导入到“图片/Droplet”。工具栏、菜单栏面板和快捷键 ⇧⌘I 都能触发。
-- **视频**：边读边播，不用先拷贝到 Mac。
-- **其他**：
-  - 按空格键快速查看文件。
-  - 传输可以随时停止，传输期间也能继续浏览。
-  - 可以在手机上新建文件夹、重命名和删除。
-  - 菜单栏面板可以查看设备状态、导入新照片、查看最近的传输记录。
+## How it works
 
-## 代码结构
-
-| 文件 | 作用 |
+| File | What it does |
 | --- | --- |
-| `MTP.swift` | 基于 IOUSBHost 的精简 MTP 实现：批量读取目录、按范围读取文件、分块传输、上传、重命名、删除。 |
-| `Store.swift` | 应用状态：连接、浏览、传输队列、文件操作。 |
-| `Thumbs.swift` | 生成照片缩略图（Exif 内嵌小图）和视频首帧，以及边读边播用的视频数据源。 |
-| `Browser.swift` | 网格视图、列表视图、浮动选择栏、拖放。 |
-| `Sidebar.swift` | 窗口根视图、边栏、对话框。 |
-| `Panels.swift` | 首次连接页、传输进度、菜单栏面板。 |
-| `DropletApp.swift` | 场景、菜单命令、设置。 |
+| `MTP.swift` | A small MTP initiator on IOUSBHost: session recovery, folder listings, ranged reads, chunked downloads, streamed uploads, rename, delete. It runs on its own serial queue so blocking USB I/O never stalls Swift's thread pool. |
+| `Thumbs.swift` | Thumbnails from Exif / HEIF previews / GetThumb, video frames, and an `AVAssetResourceLoader` that streams video over ranged reads. |
+| `Store.swift` | App state: connection, browsing, capture dates, the transfer queue, file operations. |
+| `Browser.swift` | Photo grid and list, the floating selection bar, drag and drop, the video player. |
+| `Sidebar.swift` | Window root, the sidebar and its glass island, dialogs. |
+| `Panels.swift` | Connect guide, transfer progress, menu bar panel. |
+| `DropletApp.swift` | Scenes, menu commands, settings, login item. |
 
-## 图标
+The app and menu bar icons are drawn as vectors by `scripts/make-icon.swift`.
 
-App 图标和菜单栏图标都由 `scripts/make-icon.swift` 用矢量绘制，生成 `Resources/AppIcon.icns` 和 `Resources/MenuBarTemplate.pdf`。修改设计后，删掉 `AppIcon.icns` 再运行 `./build.sh`，就会全部重新生成。
+## Notes
 
-## 致谢
+- Tested with an OPPO Find X9 Ultra (ColorOS). Other Android phones speak the same MTP dialect, but reports are welcome.
+- Only one app can use the phone over MTP at a time; quit Android File Transfer or OpenMTP while Droplet is connected.
 
-界面和交互最初参考了 OpenMTP（© Ganesh Rathinavel，MIT 许可），现在的代码已经不包含 OpenMTP 的任何部分。
+## Credits
+
+Inspired by [OpenMTP](https://github.com/ganeshrvel/openmtp) by Ganesh Rathinavel; the first prototype used its Kalam kernel. The current code contains no OpenMTP code. Design references: "Liquid glass" by Andrii Vynarchyk (Dribbble) and "Glass Button UI" by Rishabh Rai (Webflow).
+
+## License
+
+[MIT](LICENSE)
