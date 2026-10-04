@@ -10,6 +10,7 @@ enum SidebarMode: String {
 }
 
 struct RootView: View {
+    static let motion = Animation.smooth(duration: 0.35)
     @Bindable private var store = Store.shared
     @AppStorage("sidebarMode") private var mode = SidebarMode.full
     @State private var columns = UserDefaults.standard.string(forKey: "sidebarMode") ?? "full" == "full"
@@ -24,23 +25,28 @@ struct RootView: View {
                 .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 320)
                 .toolbar(removing: .sidebarToggle)
         } detail: {
-            HStack(alignment: .top, spacing: 0) {
+            // The rail floats over the content, which makes room with the same animation, so
+            // nothing jumps when it comes and goes.
+            Group {
+                if store.isConnected { Browser() } else { ConnectView() }
+            }
+            .padding(.leading, mode == .icons ? IconRail.width : 0)
+            .overlay(alignment: .topLeading) {
                 if mode == .icons {
                     IconRail()
-                        .padding(.leading, 10)
+                        .padding(.leading, 8)
                         .padding(.top, 8)
                         .transition(.move(edge: .leading).combined(with: .opacity))
                 }
-                if store.isConnected { Browser() } else { ConnectView() }
             }
             .toolbar {
                 ToolbarItem(placement: .navigation) {
-                    Button(mode.next.title, systemImage: mode.symbol) { mode = mode.next }
+                    Button(mode.next.title, systemImage: mode.symbol) { withAnimation(Self.motion) { mode = mode.next } }
                         .help(mode.next.title)
                 }
             }
         }
-        .onChange(of: mode) { withAnimation(.snappy) { columns = mode == .full ? .all : .detailOnly } }
+        .onChange(of: mode) { withAnimation(Self.motion) { columns = mode == .full ? .all : .detailOnly } }
         .onChange(of: columns) {
             // The sidebar can also be dragged shut or open.
             if columns == .all, mode != .full { mode = .full }
@@ -113,30 +119,36 @@ struct Sidebar: View {
 
 /// The sidebar folded down to its icons: a floating glass column beside the content.
 private struct IconRail: View {
+    static let width: CGFloat = 8 + 52 + 10          // inset, capsule, gap before the content
     private var store = Store.shared
 
     var body: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 4) {
             ForEach(store.visibleFavorites, id: \.self) { path in
                 let title = folderTitle(path, device: nil)
+                let current = store.path == path
                 Button(title, systemImage: folderSymbol(path)) { store.open(path) }
                     .labelStyle(.iconOnly)
-                    .font(.title3)
+                    .font(.system(size: 17))
+                    .foregroundStyle(current ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
                     .frame(width: 40, height: 40)
-                    .background(store.path == path ? AnyShapeStyle(.tint.opacity(0.18)) : AnyShapeStyle(.clear), in: .circle)
-                    .foregroundStyle(store.path == path ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
+                    .background {
+                        if current { Circle().fill(.tint.opacity(0.16)) }
+                    }
+                    .contentShape(.circle)
                     .overlay(alignment: .topTrailing) {
                         if path == Store.cameraPath && !store.newItems.isEmpty {
-                            Circle().fill(.tint).frame(width: 8, height: 8).offset(x: -4, y: 4)
+                            Circle().fill(.tint).frame(width: 7, height: 7).offset(x: -5, y: 5)
                         }
                     }
                     .help(title)
                     .dropDestination(for: URL.self) { urls, _ in store.sendToPhone(urls, to: path); return true }
             }
         }
-        .buttonStyle(.borderless)
-        .padding(.vertical, 8)
-        .glassEffect(.regular, in: .capsule)
+        .buttonStyle(.plain)
+        .animation(.smooth(duration: 0.2), value: store.path)
+        .padding(6)
+        .glassEffect(.regular.interactive(), in: .capsule)
     }
 }
 

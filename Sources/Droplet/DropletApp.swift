@@ -104,7 +104,7 @@ private struct DropletCommands: Commands {
             }
             .pickerStyle(.inline)
             Divider()
-            Button(sidebarMode.next.title) { sidebarMode = sidebarMode.next }
+            Button(sidebarMode.next.title) { withAnimation(RootView.motion) { sidebarMode = sidebarMode.next } }
                 .keyboardShortcut("s", modifiers: [.command, .control])
         }
 

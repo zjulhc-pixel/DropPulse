@@ -104,6 +104,8 @@ private struct BrowserToolbar: ToolbarContent {
 
 private struct GridBrowser: View {
     private var store = Store.shared
+    @State private var settledWidth: CGFloat = 0
+    @State private var settling: Task<Void, Never>?
 
     var body: some View {
         let items = store.items
@@ -134,6 +136,16 @@ private struct GridBrowser: View {
             .dragContainerSelection(Array(store.selection))
         }
         .contentShape(.rect)
+        // Columns follow the width only once it stops changing: while the sidebar or window
+        // moves, tiles scale in place instead of reshuffling every frame.
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
+            settling?.cancel()
+            guard settledWidth > 0 else { settledWidth = width; return }
+            settling = Task {
+                try? await Task.sleep(for: .milliseconds(150))
+                if !Task.isCancelled { withAnimation(.smooth(duration: 0.3)) { settledWidth = width } }
+            }
+        }
         .onTapGesture { store.selection = [] }
         .focusable()
         .focusEffectDisabled()
@@ -143,8 +155,10 @@ private struct GridBrowser: View {
     }
 
     private func grid(_ items: [PhoneItem], photo: Bool) -> some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: photo ? 120 : 104, maximum: 200), spacing: photo ? 6 : 14, alignment: .top)],
-                  spacing: photo ? 6 : 18) {
+        let minimum: CGFloat = photo ? 120 : 104, spacing: CGFloat = photo ? 6 : 14
+        let count = max(1, Int((settledWidth - 40 + spacing) / (minimum + spacing)))
+        return LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: spacing, alignment: .top), count: count),
+                         spacing: photo ? 6 : 18) {
             ForEach(items) { item in
                 Tile(item: item, photo: photo, selected: store.selection.contains(item.id))
                     .onTapGesture { store.click(item) }
