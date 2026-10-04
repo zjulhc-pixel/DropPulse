@@ -10,7 +10,7 @@
 
 演示视频：
 
-https://github.com/user-attachments/assets/c47f5e95-2502-4f1f-8a7d-bdd13eb10940
+https://github.com/user-attachments/assets/34b9c630-b550-4452-9392-1887bba70d5f
 
 ## 快
 

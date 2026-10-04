@@ -10,7 +10,7 @@ It is built with SwiftUI and Liquid Glass, on a small MTP implementation written
 
 A short look at it in motion:
 
-https://github.com/user-attachments/assets/a1d7efc4-90fa-41ac-95b4-419197af3e58
+https://github.com/user-attachments/assets/13fea9ba-187b-4525-a8e5-f00cb449d3e3
 
 ## Fast
 
